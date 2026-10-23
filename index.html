@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+/* ============================================================
+   FedorianStudio — INTERACTIVE DEMO seeding (demo file only).
+   Runs before every other script in this file. Pre-fills the
+   planner's own localStorage keys — only when absent — so the
+   demo opens on a warm, lived-in "today". Everything is
+   best-effort: any failure leaves the app to open fresh.
+   ============================================================ */
+(function(){
+  try {
+    var PREFS_KEY = 'fedorian_adhd_planner_prefs_v1';
+    var DATA_KEY = 'fedorian_adhd_planner_v1';
+    if (!localStorage.getItem(PREFS_KEY)) {
+      localStorage.setItem(PREFS_KEY, JSON.stringify({
+        name: 'Alex', theme: 'teal', appearance: 'light', weekStart: 'sun', home: 'today'
+      }));
+    }
+    if (!localStorage.getItem(DATA_KEY)) {
+      var pad = function(n){ return String(n).padStart(2, '0'); };
+      var now = new Date();
+      var realToday = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+      /* The planner's range is 2026-2027; its views clamp "today" into it. */
+      var clamped = realToday < '2026-01-01' ? '2026-01-01' : (realToday > '2027-12-31' ? '2027-12-31' : realToday);
+      var uid = function(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); };
+      var day = {
+        focus: [
+          { text: 'Tap a habit below \u2014 feel it pop', done: false },
+          { text: 'Brain-dump one thought (Brain Dump tab)', done: false },
+          { text: 'Make it yours in Settings \u2014 try dark mode', done: false }
+        ],
+        schedule: {},
+        todos: [
+          { id: uid(), text: 'Tick this off \u2014 small wins count', done: false },
+          { id: uid(), text: 'Already done \u2014 that is how a ticked win looks', done: true }
+        ],
+        notes: '',
+        mood: 4, energy: 3,
+        water: 2,
+        parking: ''
+      };
+      var data = {
+        days: {},
+        inbox: [ { id: uid(), text: 'Ideas land here first \u2014 nothing gets lost.', created: clamped } ],
+        notes: [ { id: uid(), title: 'Welcome to the demo',
+                   body: 'This is the real planner, running live in your browser. Tap around freely: tick a habit, dump a thought, change the theme in Settings. Everything you type is saved on this device only.' } ]
+      };
+      data.days[clamped] = day;
+      if (realToday !== clamped) data.days[realToday] = day;
+      localStorage.setItem(DATA_KEY, JSON.stringify(data));
+    }
+  } catch (e) { /* seeding failed: the app simply opens fresh */ }
+})();
+</script>
+<title>FedorianStudio — ADHD Planner 2026–2027</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   FedorianStudio ADHD Planner 2026–2027 — single-file web app
+   Brand tokens:
+   Deep teal #0B383B · Ivory #F7F3EC · Ink #181F1C
+   Champagne Gold #C7A15C · Muted Teal #5E8A87 · Sage #7D9B8A
+   Card white #FFFFFF · Soft border #E3DCCB
+   ============================================================ */
+:root{
+  --teal:#0B383B;
+  --teal-dark:#07292B;
+  --ivory:#F7F3EC;
+  --ink:#181F1C;
+  --ink-soft:#4A5551;
+  --gold:#C7A15C;
+  --gold-soft:#EFE3CB;
+  --muted-teal:#5E8A87;
+  --sage:#7D9B8A;
+  --card:#FFFFFF;
+  --border:#E3DCCB;
+  --danger:#B4552D;
+  --radius:14px;
+  --shadow:0 1px 3px rgba(11,56,59,.06),0 8px 24px rgba(11,56,59,.05);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:'Montserrat',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  background:var(--ivory);
+  color:var(--ink);
+  font-size:15px;
+  line-height:1.5;
+}
+h1,h2,h3{font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:700;color:var(--teal);line-height:1.2}
+button{font-family:inherit;cursor:pointer}
+input,textarea,select{font-family:inherit;font-size:15px;color:var(--ink)}
+::placeholder{color:#9AA39E}
+
+/* ---------- App layout ---------- */
+.app{display:flex;min-height:100vh}
+main{flex:1;min-width:0;padding:28px 22px 60px}
+.wrap{max-width:940px;margin:0 auto}
+
+/* ---------- Sidebar ---------- */
+.sidebar{
+  width:248px;flex:0 0 248px;background:var(--teal);color:var(--ivory);
+  position:sticky;top:0;height:100vh;display:flex;flex-direction:column;
+  padding:26px 18px 18px;z-index:60;
+}
+.brand{padding:2px 6px 20px;border-bottom:1px solid rgba(247,243,236,.16);margin-bottom:16px}
+.wordmark{font-weight:800;letter-spacing:.34em;font-size:19px;color:#fff}
+.wordmark-sub{
+  font-family:'Segoe Script','Brush Script MT','Comic Sans MS',cursive;
+  color:var(--gold);font-size:24px;line-height:1;margin-top:2px;
+}
+.brand-tag{margin-top:10px;font-size:10px;letter-spacing:.22em;font-weight:600;color:rgba(247,243,236,.65)}
+nav{display:flex;flex-direction:column;gap:4px}
+.nav-btn{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  background:transparent;border:none;border-left:3px solid transparent;
+  color:rgba(247,243,236,.85);font-size:14px;font-weight:600;
+  padding:11px 12px;border-radius:0 10px 10px 0;min-height:44px;
+  transition:background-color .18s ease,color .18s ease,border-color .18s ease;
+}
+.nav-btn:hover{background:rgba(247,243,236,.08);color:#fff}
+.nav-btn.active{background:rgba(199,161,92,.16);border-left-color:var(--gold);color:#fff}
+.sidefoot{margin-top:auto;padding:12px 6px 2px;font-size:11.5px;line-height:1.55;color:rgba(247,243,236,.55);border-top:1px solid rgba(247,243,236,.16)}
+
+/* ---------- Views & cards ---------- */
+.view{display:none}
+.view.active{display:block}
+.view-head{margin-bottom:18px}
+.view-head h1{font-size:30px}
+.view-head .sub{color:var(--ink-soft);margin-top:4px;font-size:14px}
+.card{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:20px;margin-bottom:16px;
+}
+.card h2{font-size:19px;margin-bottom:4px}
+.card h3{font-size:16px;margin-bottom:6px}
+.card .hint{font-size:13px;color:var(--ink-soft);margin-bottom:12px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-2 .card{margin-bottom:0}
+.section-gap{margin-bottom:16px}
+
+/* ---------- Generic controls ---------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  background:var(--teal);color:#fff;border:1px solid var(--teal);
+  font-size:14px;font-weight:600;padding:10px 18px;border-radius:10px;min-height:44px;
+  transition:background-color .18s ease,border-color .18s ease,transform .15s ease,box-shadow .15s ease;
+}
+.btn:hover{background:var(--teal-dark);transform:translateY(-1px);box-shadow:0 4px 12px rgba(11,56,59,.14)}
+.btn:disabled:hover{transform:none;box-shadow:none}
+.btn.gold{background:var(--gold);border-color:var(--gold);color:var(--teal-dark)}
+.btn.gold:hover{background:#B8934A}
+.btn.ghost{background:transparent;color:var(--teal);border-color:var(--border)}
+.btn.ghost:hover{border-color:var(--gold);background:#fff}
+.btn.small{padding:7px 13px;min-height:38px;font-size:13px}
+.btn.danger{background:transparent;border-color:#E4C4B2;color:var(--danger)}
+.btn.danger:hover{background:#FBEEE7}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.icon-btn{
+  background:transparent;border:1px solid transparent;color:#9AA39E;border-radius:8px;
+  width:34px;height:34px;font-size:17px;line-height:1;flex:0 0 auto;
+}
+.icon-btn:hover{color:var(--danger);border-color:var(--border);background:#fff}
+.text-input,.text-area,.select-input{
+  width:100%;background:#fff;border:1px solid var(--border);border-radius:10px;
+  padding:11px 13px;outline:none;
+}
+.text-input:focus,.text-area:focus,.select-input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(199,161,92,.18)}
+.text-area{resize:vertical;min-height:84px;line-height:1.55}
+label.file-label{display:inline-flex}
+input[type="date"].text-input{padding:9px 13px}
+input[type="file"]{display:none}
+
+/* Round check toggle (focus / todos / routines) */
+.check{
+  width:30px;height:30px;flex:0 0 30px;border-radius:50%;
+  border:2px solid var(--border);background:#fff;color:#fff;font-size:15px;font-weight:700;
+  display:inline-flex;align-items:center;justify-content:center;line-height:1;padding:0;
+  transition:background-color .18s ease,border-color .18s ease,transform .12s ease;
+}
+.check:active{transform:scale(.86)}
+.check:hover{border-color:var(--sage)}
+.check.on{background:var(--sage);border-color:var(--sage)}
+
+/* ---------- Focus rows ---------- */
+.focus-row{display:flex;align-items:center;gap:12px;padding:7px 0}
+.focus-row input{
+  flex:1;border:none;border-bottom:1px solid var(--border);background:transparent;
+  padding:8px 2px;font-size:16px;outline:none;border-radius:0;
+}
+.focus-row input:focus{border-bottom-color:var(--gold)}
+.focus-row.done input{color:#9AA39E;text-decoration:line-through}
+
+/* ---------- Schedule ---------- */
+.sched-row{display:grid;grid-template-columns:58px 1fr;align-items:center;border-bottom:1px solid #F1EAD9}
+.sched-row:last-child{border-bottom:none}
+.sched-time{font-size:12.5px;font-weight:600;color:var(--muted-teal);letter-spacing:.04em;padding:9px 0}
+.sched-row input{border:none;background:transparent;padding:9px 6px;font-size:14.5px;outline:none;width:100%}
+.sched-row input:focus{background:#FDF9EF}
+
+/* ---------- To-dos ---------- */
+.todo-row{display:flex;align-items:center;gap:12px;padding:6px 0}
+.todo-text{flex:1;font-size:15px}
+.todo-row.done .todo-text{color:#9AA39E;text-decoration:line-through}
+.add-row{display:flex;gap:10px;margin-top:12px}
+.add-row .text-input{flex:1}
+.empty-note{color:#9AA39E;font-size:14px;padding:8px 0}
+
+/* ---------- Date navigation ---------- */
+.date-nav{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.date-nav .spacer{flex:1}
+.date-label{font-family:'Playfair Display',Georgia,serif;font-size:21px;font-weight:700;color:var(--teal)}
+
+/* ---------- Mood / energy / water ---------- */
+.pill-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 4px}
+.pill-row .pill-label{font-size:12px;font-weight:600;color:var(--ink-soft);letter-spacing:.06em;text-transform:uppercase;margin-right:2px}
+.pill{
+  width:42px;height:42px;border-radius:50%;border:2px solid var(--border);background:#fff;
+  font-weight:700;font-size:15px;color:var(--ink-soft);
+  transition:background-color .18s ease,border-color .18s ease,color .18s ease,transform .12s ease;
+}
+.pill:active{transform:scale(.9)}
+.pill:hover{border-color:var(--gold)}
+.pill.on{background:var(--gold);border-color:var(--gold);color:#fff}
+.pill-scale{display:flex;justify-content:space-between;font-size:11.5px;color:#9AA39E;max-width:290px;margin-left:2px}
+.glasses{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.glass{
+  width:46px;height:52px;border:2px solid var(--border);border-radius:6px 6px 12px 12px;
+  background:#fff;font-size:17px;color:var(--muted-teal);display:flex;align-items:center;justify-content:center;
+  transition:background-color .18s ease,border-color .18s ease,color .18s ease;
+}
+.glass.on{background:var(--muted-teal);border-color:var(--muted-teal);color:#fff}
+
+/* ---------- Calendar ---------- */
+.cal-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cal-dow{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-teal);text-align:center;padding:6px 0}
+.cal-day{
+  position:relative;min-height:56px;border:1px solid var(--border);border-radius:10px;background:#fff;
+  font-size:14.5px;font-weight:600;color:var(--ink);padding:7px 0 14px;
+}
+.cal-day:hover{border-color:var(--gold)}
+.cal-day.blank{background:transparent;border-color:transparent;pointer-events:none}
+.cal-day.today{outline:2px solid var(--muted-teal);outline-offset:-2px}
+.cal-day.selected{border-color:var(--gold);background:#FDF9EF}
+.cal-day .dot{
+  position:absolute;left:50%;bottom:7px;transform:translateX(-50%);
+  width:8px;height:8px;border-radius:50%;background:var(--gold);
+}
+
+/* ---------- Weekly ---------- */
+.week-day-row{display:grid;grid-template-columns:118px 1fr;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #F1EAD9}
+.week-day-row:last-child{border-bottom:none}
+.week-day-name{font-size:13.5px;font-weight:700;color:var(--teal)}
+.week-day-name span{display:block;font-weight:500;color:#9AA39E;font-size:12px}
+
+/* ---------- Inbox ---------- */
+.inbox-row{border:1px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:10px;background:#FFFDF8}
+.inbox-text{font-size:15.5px;margin-bottom:4px;word-break:break-word}
+.inbox-meta{font-size:12px;color:#9AA39E;margin-bottom:10px}
+.inbox-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inbox-actions input[type="date"]{border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13.5px;background:#fff}
+
+/* ---------- Habits ---------- */
+.habit-scroll{overflow-x:auto;padding-bottom:6px}
+table.habit-table{border-collapse:separate;border-spacing:4px;min-width:100%}
+table.habit-table th{font-size:11.5px;color:var(--muted-teal);font-weight:700;padding:2px}
+table.habit-table th.habit-name-col,table.habit-table td.habit-name-cell{
+  position:sticky;left:0;background:#fff;z-index:2;min-width:172px;text-align:left;padding-right:8px;
+}
+.habit-name-wrap{display:flex;align-items:center;gap:4px}
+.habit-name-input{flex:1;border:none;border-bottom:1px solid transparent;background:transparent;font-weight:600;font-size:14px;padding:6px 2px;outline:none;min-width:0}
+.habit-name-input:focus{border-bottom-color:var(--gold)}
+.habit-cell{
+  width:36px;height:36px;border-radius:9px;border:1.5px solid var(--border);background:#fff;
+  color:#fff;font-size:14px;font-weight:700;padding:0;
+  transition:background-color .15s ease,border-color .15s ease;
+}
+.habit-cell:hover{border-color:var(--sage)}
+.habit-cell.on{background:var(--sage);border-color:var(--sage)}
+.habit-cell.today-col{outline:2px solid var(--gold-soft)}
+.habit-count{font-size:14px;color:var(--ink-soft);margin-top:10px}
+.habit-count strong{color:var(--teal)}
+
+/* ---------- Today habit chips ---------- */
+.chip-row{display:flex;flex-wrap:wrap;gap:9px}
+.chip{
+  border:1.5px solid var(--border);background:#fff;border-radius:999px;padding:10px 16px;
+  font-size:14px;font-weight:600;color:var(--ink-soft);min-height:44px;
+  transition:background-color .18s ease,border-color .18s ease,color .18s ease,transform .12s ease;
+}
+.chip:active{transform:scale(.95)}
+.chip:hover{border-color:var(--sage)}
+.chip.on{background:var(--sage);border-color:var(--sage);color:#fff}
+
+/* ---------- Routines ---------- */
+.routine-row{display:flex;align-items:center;gap:12px;padding:6px 0}
+.routine-text{flex:1;font-size:15px}
+.routine-row.done .routine-text{color:#9AA39E;text-decoration:line-through}
+
+/* ---------- Notes ---------- */
+.note-card{border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;background:#FFFDF8}
+.note-title{width:100%;border:none;background:transparent;font-family:'Playfair Display',Georgia,serif;font-size:18px;font-weight:700;color:var(--teal);outline:none;padding:2px 0 8px}
+.note-body{width:100%;border:none;background:transparent;resize:vertical;min-height:70px;outline:none;line-height:1.6;font-size:14.5px}
+.note-head{display:flex;align-items:flex-start;gap:8px}
+.note-head .note-title{flex:1}
+
+/* ---------- Settings ---------- */
+.settings-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.howto p{margin-bottom:9px;font-size:14.5px;color:var(--ink-soft)}
+.howto p strong{color:var(--teal)}
+.privacy-line{
+  display:flex;gap:10px;align-items:flex-start;background:var(--gold-soft);border:1px solid var(--border);
+  border-radius:12px;padding:14px 16px;font-size:14.5px;color:var(--teal-dark);margin-bottom:16px;
+}
+
+/* ---------- Icons & motion ---------- */
+.ic{width:19px;height:19px;flex:0 0 auto}
+.nav-btn .ic{width:20px;height:20px;color:rgba(247,243,236,.55);transition:color .18s ease}
+.nav-btn:hover .ic{color:#fff}
+.nav-btn.active .ic{color:var(--gold)}
+.btn .ic{width:17px;height:17px}
+.check .ic{width:16px;height:16px}
+.habit-cell .ic{width:15px;height:15px}
+.chip .ic{width:15px;height:15px;vertical-align:-2px;margin-right:1px}
+.glass .ic{width:22px;height:22px}
+.pill-label .ic{width:15px;height:15px;vertical-align:-2px;margin-right:3px}
+body,.card,.sidebar{transition:background-color .25s ease,color .25s ease}
+@keyframes viewIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.view.active{animation:viewIn .22s ease}
+@keyframes cardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.view.entering .card{animation:cardIn .3s ease both}
+.view.entering .card:nth-child(2){animation-delay:.04s}
+.view.entering .card:nth-child(3){animation-delay:.08s}
+.view.entering .card:nth-child(4){animation-delay:.12s}
+@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.22)}100%{transform:scale(1)}}
+.pop{animation:pop .28s ease}
+@keyframes focusGlow{0%{box-shadow:var(--shadow)}35%{box-shadow:0 0 0 3px rgba(199,161,92,.55),0 0 28px rgba(199,161,92,.5)}100%{box-shadow:var(--shadow)}}
+.card.focus-card.glow{animation:focusGlow 1.05s ease}
+
+/* ---------- Personalisation: greeting & sidebar owner ---------- */
+.greeting{font-family:'Playfair Display',Georgia,serif;font-size:20px;font-weight:600;color:var(--gold);margin-top:6px}
+.brand-owner{margin-top:8px;font-size:12.5px;font-weight:600;letter-spacing:.04em;color:var(--gold)}
+@media (max-width:860px){ .brand-owner{display:none !important} }
+
+/* ---------- Personalisation: controls ---------- */
+.swatch-row{display:flex;flex-wrap:wrap;gap:9px}
+.swatch{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1.5px solid var(--border);border-radius:999px;padding:7px 13px 7px 8px;font-size:13px;font-weight:600;color:var(--ink-soft);min-height:40px;transition:border-color .18s ease,color .18s ease,background-color .18s ease}
+.swatch .dot{width:24px;height:24px;border-radius:50%;border:2px solid rgba(24,31,28,.12);flex:0 0 auto}
+.swatch.on{border-color:var(--gold);color:var(--ink)}
+.swatch.on .dot{box-shadow:0 0 0 3px rgba(199,161,92,.35)}
+.seg{display:flex;gap:8px;flex-wrap:wrap}
+.seg-btn{background:#fff;border:1.5px solid var(--border);color:var(--ink-soft);border-radius:10px;padding:9px 18px;font-size:13.5px;font-weight:600;min-height:42px;transition:background-color .18s ease,color .18s ease,border-color .18s ease}
+.seg-btn.on{background:var(--teal);border-color:var(--teal);color:#fff}
+
+/* ---------- Personalisation: accent themes (gold stays the constant secondary) ---------- */
+html[data-theme="midnight"]{--teal:#1B2A4A;--teal-dark:#111D34;--muted-teal:#5B729E;--sage:#7E93B5}
+html[data-theme="forest"]{--teal:#1E4033;--teal-dark:#132B21;--muted-teal:#5F8A72;--sage:#84AC90}
+html[data-theme="plum"]{--teal:#3D2440;--teal-dark:#2A1730;--muted-teal:#8A6489;--sage:#A583A8}
+html[data-theme="ember"]{--teal:#7A3220;--teal-dark:#59220F;--muted-teal:#B0714F;--sage:#C08B62}
+
+/* ---------- Personalisation: dark appearance ---------- */
+html[data-appearance="dark"]{
+  --ivory:#0F1719;--card:#1C282B;--ink:#ECE8DC;--ink-soft:#A7B3AF;
+  --border:#35443F;--gold-soft:#38301E;
+  --shadow:0 1px 3px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.3);
+}
+html[data-appearance="dark"] h1,html[data-appearance="dark"] h2,html[data-appearance="dark"] h3{color:#EFE9DA}
+html[data-appearance="dark"] .date-label,html[data-appearance="dark"] .week-day-name,html[data-appearance="dark"] .note-title{color:#EFE9DA}
+html[data-appearance="dark"] .greeting{color:#DCC084}
+html[data-appearance="dark"] .habit-count strong,html[data-appearance="dark"] .howto p strong{color:var(--gold)}
+html[data-appearance="dark"] .privacy-line{color:var(--ink)}
+html[data-appearance="dark"] .text-input,html[data-appearance="dark"] .text-area,html[data-appearance="dark"] .select-input,
+html[data-appearance="dark"] .chip,html[data-appearance="dark"] .pill,html[data-appearance="dark"] .glass,
+html[data-appearance="dark"] .cal-day,html[data-appearance="dark"] .swatch,html[data-appearance="dark"] .seg-btn{background:var(--card);color:var(--ink)}
+html[data-appearance="dark"] .check,html[data-appearance="dark"] .habit-cell{background:var(--card)}
+html[data-appearance="dark"] .check.on{background:var(--sage);border-color:var(--sage)}
+html[data-appearance="dark"] .habit-cell.on{background:var(--sage);border-color:var(--sage)}
+html[data-appearance="dark"] .chip.on{background:var(--sage);border-color:var(--sage);color:#fff}
+html[data-appearance="dark"] .pill.on{background:var(--gold);border-color:var(--gold);color:#fff}
+html[data-appearance="dark"] .glass.on{background:var(--muted-teal);border-color:var(--muted-teal);color:#fff}
+html[data-appearance="dark"] .seg-btn.on{background:var(--teal);border-color:var(--teal);color:#fff}
+html[data-appearance="dark"] .cal-day.selected{background:rgba(199,161,92,.14)}
+html[data-appearance="dark"] .inbox-row,html[data-appearance="dark"] .note-card{background:var(--card)}
+html[data-appearance="dark"] .sched-row,html[data-appearance="dark"] .week-day-row{border-bottom-color:var(--border)}
+html[data-appearance="dark"] .sched-row input:focus{background:rgba(199,161,92,.1)}
+html[data-appearance="dark"] table.habit-table th.habit-name-col,html[data-appearance="dark"] table.habit-table td.habit-name-cell{background:var(--card)}
+html[data-appearance="dark"] .inbox-actions input[type="date"]{background:var(--card);color:var(--ink)}
+html[data-appearance="dark"] .btn.ghost{color:var(--ink)}
+html[data-appearance="dark"] .btn.ghost:hover{background:var(--card)}
+html[data-appearance="dark"] .icon-btn:hover{background:var(--card)}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+  .btn:hover{transform:none;box-shadow:none}
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width:900px){ .grid-2{grid-template-columns:1fr} }
+@media (max-width:860px){
+  .app{flex-direction:column}
+  .sidebar{
+    width:100%;flex:none;height:auto;position:static;padding:14px 16px 10px;
+  }
+  .brand{display:flex;align-items:baseline;gap:12px;padding:0 2px 8px;margin-bottom:0;border-bottom:none}
+  .wordmark{font-size:16px}
+  .wordmark-sub{font-size:20px;margin-top:0}
+  .brand-tag{display:none}
+  .sidefoot{display:none}
+  .sidebar nav{
+    position:fixed;left:0;right:0;bottom:0;z-index:100;background:var(--teal);
+    flex-direction:row;overflow-x:auto;padding:8px 10px;gap:6px;
+    box-shadow:0 -4px 18px rgba(11,56,59,.25);-webkit-overflow-scrolling:touch;
+  }
+  .nav-btn{width:auto;white-space:nowrap;border-left:none;border-bottom:3px solid transparent;border-radius:10px;padding:9px 13px;font-size:13px}
+  .nav-btn.active{border-bottom-color:var(--gold)}
+  main{padding:18px 14px 110px}
+  .view-head h1{font-size:25px}
+  .card{padding:16px}
+  .cal-day{min-height:46px;font-size:13.5px}
+  .week-day-row{grid-template-columns:92px 1fr}
+}
+</style>
+<style>
+/* ============================================================
+   Demo chrome (demo file only — not part of the product):
+   fixed banner + layout offset + sidebar DEMO pill.
+   ============================================================ */
+:root{ --demo-bar-h: 42px }
+#demoBanner{
+  position:fixed; top:0; left:0; right:0; height:var(--demo-bar-h); z-index:300;
+  background:#0B383B; color:#F7F3EC; display:flex; align-items:center; justify-content:center; gap:16px;
+  padding:0 52px 0 16px; font-family:'Montserrat',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  font-size:12px; font-weight:700; letter-spacing:.16em; box-shadow:0 2px 14px rgba(11,56,59,.28);
+}
+#demoBanner .demo-label{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0 }
+#demoBanner a{ color:#C7A15C; text-decoration:none; font-weight:800; white-space:nowrap; letter-spacing:.1em }
+#demoBanner a:hover{ text-decoration:underline }
+#demoBanner .demo-x{
+  position:absolute; right:8px; top:50%; transform:translateY(-50%);
+  background:transparent; border:none; color:rgba(247,243,236,.75);
+  font-size:20px; line-height:1; padding:8px 10px; cursor:pointer; font-family:inherit;
+}
+#demoBanner .demo-x:hover{ color:#fff }
+body{ padding-top:var(--demo-bar-h) }
+.app{ min-height:calc(100vh - var(--demo-bar-h)) }
+@media (min-width:861px){
+  .sidebar{ top:var(--demo-bar-h); height:calc(100vh - var(--demo-bar-h)) }
+}
+html.demo-off #demoBanner{ display:none }
+html.demo-off body{ padding-top:0 }
+html.demo-off .app{ min-height:100vh }
+@media (min-width:861px){
+  html.demo-off .sidebar{ top:0; height:100vh }
+}
+.demo-pill{
+  display:inline-block; font-family:'Montserrat',sans-serif; font-size:9.5px; font-weight:800;
+  letter-spacing:.18em; background:#C7A15C; color:#0B383B; border-radius:999px;
+  padding:3px 8px 2px; vertical-align:middle; margin-left:6px;
+}
+@media (max-width:560px){
+  #demoBanner{ font-size:10.5px; letter-spacing:.08em; gap:8px }
+}
+</style>
+<script>
+/* Apply the saved theme/appearance before first paint (preferences are managed by the main script below). */
+(function(){ try { var p = JSON.parse(localStorage.getItem('fedorian_adhd_planner_prefs_v1') || '{}'); var de = document.documentElement; if (p.theme) de.dataset.theme = p.theme; if (p.appearance) de.dataset.appearance = p.appearance; } catch (e) {} })();
+</script>
+</head>
+<body>
+<div id="demoBanner" role="note">
+  <span class="demo-label">INTERACTIVE DEMO — FedorianStudio ADHD Planner 2026–2027</span>
+  <a href="https://www.etsy.com/shop/FedorianStudio" target="_blank" rel="noopener">Get the full planner on Etsy →</a>
+  <button class="demo-x" id="demoBannerX" type="button" aria-label="Dismiss demo banner">×</button>
+</div>
+<script>
+(function(){ var b = document.getElementById('demoBannerX'); if (b) b.addEventListener('click', function(){ document.documentElement.classList.add('demo-off'); }); })();
+</script>
+<div class="app">
+
+  <!-- ============ Sidebar / navigation ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div>
+        <div class="wordmark">FEDORIAN</div>
+        <div class="wordmark-sub">studio <span class="demo-pill">DEMO</span></div>
+      </div>
+      <div class="brand-tag">ADHD PLANNER · 2026–2027</div>
+      <div class="brand-owner" id="brandOwner" style="display:none"></div>
+    </div>
+    <nav id="mainNav" aria-label="Planner sections">
+      <button class="nav-btn" data-action="nav" data-view="today"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5 5l1.6 1.6M17.4 17.4 19 19M19 5l-1.6 1.6M6.6 17.4 5 19"/></svg>Today</button>
+      <button class="nav-btn" data-action="nav" data-view="calendar"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Calendar</button>
+      <button class="nav-btn" data-action="nav" data-view="planner"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M9 8.5h6M9 12.5h6M9 16.5h4"/></svg>Planner</button>
+      <button class="nav-btn" data-action="nav" data-view="weekly"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3.5" y="4.5" width="4.6" height="15" rx="1"/><rect x="9.7" y="4.5" width="4.6" height="15" rx="1"/><rect x="15.9" y="4.5" width="4.6" height="15" rx="1"/></svg>Weekly</button>
+      <button class="nav-btn" data-action="nav" data-view="inbox"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.5 12.5h5.7l1.9 3h3.8l1.9-3h5.7"/><path d="M5.6 5.2 2.5 12.5V18a2.5 2.5 0 0 0 2.5 2.5h14a2.5 2.5 0 0 0 2.5-2.5v-5.5l-3.1-7.3A2 2 0 0 0 16.6 4H7.4a2 2 0 0 0-1.8 1.2z"/></svg>Brain Dump</button>
+      <button class="nav-btn" data-action="nav" data-view="habits"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg>Habits</button>
+      <button class="nav-btn" data-action="nav" data-view="routines"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 13.8A8.2 8.2 0 1 1 10.2 4 6.6 6.6 0 0 0 20 13.8z"/></svg>Routines</button>
+      <button class="nav-btn" data-action="nav" data-view="notes"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.5 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M13.5 3.5v5h5"/><path d="M9 13h6M9 16.5h6"/></svg>Notes</button>
+      <button class="nav-btn" data-action="nav" data-view="settings"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3.2"/><path stroke-width="2.3" d="M12 3v2.6M12 18.4V21M3 12h2.6M18.4 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></svg>Settings</button>
+    </nav>
+    <div class="sidefoot">Planners for every brain and every plan. Your data is saved only in this browser, on this device.</div>
+  </aside>
+
+  <!-- ============ Views ============ -->
+  <main>
+    <div class="wrap">
+      <section class="view" id="view-today"></section>
+      <section class="view" id="view-calendar"></section>
+      <section class="view" id="view-planner"></section>
+      <section class="view" id="view-weekly"></section>
+      <section class="view" id="view-inbox"></section>
+      <section class="view" id="view-habits"></section>
+      <section class="view" id="view-routines"></section>
+      <section class="view" id="view-notes"></section>
+
+      <!-- Settings is static markup; its buttons are wired by the global handlers -->
+      <section class="view" id="view-settings">
+        <div class="view-head">
+          <h1>Settings &amp; Your Data</h1>
+          <p class="sub">Back up, restore, or start fresh — you are in control.</p>
+        </div>
+        <div class="privacy-line"><span aria-hidden="true">◆</span><span><strong>Your data never leaves this device</strong> — everything is saved in this browser. No account, no server, no tracking.</span></div>
+        <div class="card">
+          <h2>Make it yours</h2>
+          <p class="hint">Personal touches, saved on this device only. They apply instantly and never touch your planner data.</p>
+          <h3>Your name</h3>
+          <input type="text" class="text-input" id="prefName" data-pref="name" placeholder="e.g. Alex — shown in the sidebar and on Today" autocomplete="off">
+          <h3 style="margin-top:18px">Accent theme</h3>
+          <div class="swatch-row">
+            <button class="swatch" data-action="pref-theme" data-theme="teal"><span class="dot" style="background:#0B383B"></span>Deep Teal</button>
+            <button class="swatch" data-action="pref-theme" data-theme="midnight"><span class="dot" style="background:#1B2A4A"></span>Midnight</button>
+            <button class="swatch" data-action="pref-theme" data-theme="forest"><span class="dot" style="background:#1E4033"></span>Forest</button>
+            <button class="swatch" data-action="pref-theme" data-theme="plum"><span class="dot" style="background:#3D2440"></span>Plum</button>
+            <button class="swatch" data-action="pref-theme" data-theme="ember"><span class="dot" style="background:#7A3220"></span>Ember</button>
+          </div>
+          <h3 style="margin-top:18px">Appearance</h3>
+          <div class="seg">
+            <button class="seg-btn" data-action="pref-appearance" data-val="light">Light</button>
+            <button class="seg-btn" data-action="pref-appearance" data-val="dark">Dark</button>
+          </div>
+          <h3 style="margin-top:18px">Week starts on</h3>
+          <div class="seg">
+            <button class="seg-btn" data-action="pref-weekstart" data-val="sun">Sunday</button>
+            <button class="seg-btn" data-action="pref-weekstart" data-val="mon">Monday</button>
+          </div>
+          <h3 style="margin-top:18px">Open on</h3>
+          <select class="select-input" id="prefHome">
+            <option value="today">Today</option>
+            <option value="calendar">Calendar</option>
+            <option value="planner">Planner</option>
+            <option value="weekly">Weekly</option>
+            <option value="inbox">Brain Dump</option>
+            <option value="habits">Habits</option>
+            <option value="routines">Routines</option>
+            <option value="notes">Notes</option>
+            <option value="settings">Settings</option>
+          </select>
+          <p class="hint" style="margin-top:8px">The tab the planner opens on. Takes effect next time you open it.</p>
+        </div>
+        <div class="card">
+          <h2>Back up &amp; restore</h2>
+          <p class="hint">Export saves everything — days, habits, routines, notes — as one small file. Import it on any device or browser to pick up right where you left off.</p>
+          <div class="settings-actions">
+            <button class="btn gold" data-action="export"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 15V4"/><path d="M6.5 8.5 12 3l5.5 5.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>Export my data (JSON)</button>
+            <label class="btn ghost file-label" for="importFile"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4v11"/><path d="M6.5 10.5 12 16l5.5-5.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>Import data</label>
+            <input type="file" id="importFile" accept=".json,application/json">
+          </div>
+        </div>
+        <div class="card howto">
+          <h2>How to use this planner</h2>
+          <p><strong>Start on Today.</strong> The planner opens on today — set your Top 3 Focus and let the rest be optional.</p>
+          <p><strong>Capture, don't organise.</strong> Anything that pops into your head goes in the Brain Dump. Sort it later, only if you feel like it.</p>
+          <p><strong>Missed a day? Nothing happened.</strong> There are no streaks to break and nothing turns red. Just open today and begin again.</p>
+          <p><strong>Low-energy days are planned for.</strong> The Routines tab has a short Reset list for low-spoon days — the bare minimum still counts.</p>
+          <p><strong>Everything saves itself.</strong> Type, tap, close the tab. It's all here when you come back.</p>
+        </div>
+        <div class="card">
+          <h2>Start over</h2>
+          <p class="hint">Clear every day, habit, routine and note from this browser and return to a fresh planner. This cannot be undone — export first if you might want it back.</p>
+          <button class="btn danger" data-action="clear-all">Clear all my data</button>
+        </div>
+        <p style="text-align:center;color:#9AA39E;font-size:12.5px;margin-top:8px">FedorianStudio · ADHD Planner 2026–2027 · A Hastle product</p>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script>
+'use strict';
+/* ================================================================
+   FedorianStudio ADHD Planner 2026–2027
+   Single localStorage key, autosave on every change.
+   Day data is shared between the Today view and the Planner view.
+   ================================================================ */
+
+/* ---------------- Date helpers ---------------- */
+const pad2 = n => String(n).padStart(2, '0');
+function isoOf(d){ return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+function parseISO(s){ const p = s.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+function addDays(d, n){ const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; }
+function todayISO(){ return isoOf(new Date()); }
+const RANGE_MIN = '2026-01-01';
+const RANGE_MAX = '2027-12-31';
+function clampISO(s){ return s < RANGE_MIN ? RANGE_MIN : (s > RANGE_MAX ? RANGE_MAX : s); }
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DOW_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function fmtLong(iso){
+  return parseISO(iso).toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+}
+function fmtShort(iso){
+  return parseISO(iso).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+}
+
+/* ---------------- Small utilities ---------------- */
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+    { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]
+  ));
+}
+
+/* ---------------- Icons (inline SVG, stroke style, currentColor) ---------------- */
+const ICON_PATHS = {
+  check: '<path d="M4.5 12.8 9.7 18 19.5 6.5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  arrow: '<path d="M4 12h15"/><path d="M13.5 6l6 6-6 6"/>',
+  drop: '<path d="M12 3.6c3.4 4.1 5.9 7.2 5.9 9.9a5.9 5.9 0 1 1-11.8 0c0-2.7 2.5-5.8 5.9-9.9z"/>',
+  bolt: '<path d="M13.2 2.8 4.8 13.6h5.7l-1.2 7.6 8.4-10.8h-5.7z"/>',
+  mood: '<circle cx="12" cy="12" r="8.5"/><circle cx="9" cy="10" r="1.05" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.05" fill="currentColor" stroke="none"/><path d="M8.2 14.3c1.1 1.3 2.4 1.9 3.8 1.9s2.7-.6 3.8-1.9"/>'
+};
+function ic(name){
+  return '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + (ICON_PATHS[name] || '') + '</svg>';
+}
+
+/* ---------------- State ---------------- */
+const STORE_KEY = 'fedorian_adhd_planner_v1';
+
+function blankDay(){
+  return {
+    focus: [ {text:'', done:false}, {text:'', done:false}, {text:'', done:false} ],
+    schedule: {},            // { "7": "text", ... } hours 7–21
+    todos: [],               // [ {id, text, done} ]
+    notes: '',
+    mood: 0, energy: 0,      // 0 = unset, 1–5
+    water: 0,                // 0–8 glasses
+    parking: ''
+  };
+}
+function seedState(){
+  return {
+    days: {},                                   // iso -> day object
+    inbox: [],                                  // [ {id, text, created} ]
+    habits: [                                   // up to 8, stable ids
+      { id: uid(), name: 'Medication' },
+      { id: uid(), name: 'Walk' },
+      { id: uid(), name: 'Inbox zero' }
+    ],
+    habitChecks: {},                            // iso -> { habitId: true }
+    routines: {
+      morning: [
+        { id: uid(), text: 'Drink a glass of water' },
+        { id: uid(), text: 'Take medication' },
+        { id: uid(), text: 'Open today’s planner' },
+        { id: uid(), text: 'Pick one small first win' }
+      ],
+      evening: [
+        { id: uid(), text: 'Brain-dump anything on your mind' },
+        { id: uid(), text: 'Quick 5-minute tidy' },
+        { id: uid(), text: 'Set out tomorrow’s essentials' },
+        { id: uid(), text: 'Screens wind-down' }
+      ],
+      reset: [
+        { id: uid(), text: 'Eat something' },
+        { id: uid(), text: 'Drink water' },
+        { id: uid(), text: 'Rest — guilt-free' },
+        { id: uid(), text: 'One tiny task, only if you can' }
+      ]
+    },
+    routineChecks: {},                          // iso -> { morning:{id:true}, evening:{}, reset:{} }
+    notes: [],                                  // [ {id, title, body} ]
+    weeks: {}                                   // weekStartIso -> {goal, focus:{iso:text}, wins, letgo, next}
+  };
+}
+function loadState(){
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const s = Object.assign(seedState(), parsed);
+      if (!Array.isArray(s.habits) || !s.habits.length) s.habits = seedState().habits;
+      if (!s.routines || !Array.isArray(s.routines.morning)) s.routines = seedState().routines;
+      return s;
+    }
+  } catch (e) { /* corrupted storage falls through to a fresh seed */ }
+  return seedState();
+}
+let state = loadState();
+let saveTimer = null;
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* storage full/blocked: keep app usable */ }
+  }, 150);
+}
+
+/* Day accessors: getDay never writes; ensureDay creates + returns the stored object */
+function getDay(iso){ return state.days[iso] || blankDay(); }
+function ensureDay(iso){
+  if (!state.days[iso]) state.days[iso] = blankDay();
+  return state.days[iso];
+}
+function dayHasData(iso){
+  const d = state.days[iso];
+  if (!d) return false;
+  return d.focus.some(f => f.text && f.text.trim())
+    || Object.keys(d.schedule || {}).some(h => d.schedule[h] && d.schedule[h].trim())
+    || (d.todos && d.todos.length > 0)
+    || (d.notes && d.notes.trim())
+    || d.mood > 0 || d.energy > 0 || d.water > 0
+    || (d.parking && d.parking.trim());
+}
+
+/* Week helpers (weeks start on Sunday) */
+function weekStartOf(iso){
+  const d = parseISO(iso);
+  const back = (typeof prefs !== 'undefined' && prefs.weekStart === 'mon') ? (d.getDay() + 6) % 7 : d.getDay();
+  return isoOf(addDays(d, -back));
+}
+function getWeek(key){ return state.weeks[key] || { goal:'', focus:{}, wins:'', letgo:'', next:'' }; }
+function ensureWeek(key){
+  if (!state.weeks[key]) state.weeks[key] = { goal:'', focus:{}, wins:'', letgo:'', next:'' };
+  return state.weeks[key];
+}
+
+/* ---------------- UI state (not persisted) ---------------- */
+const realToday = todayISO();
+let currentView = 'today';
+let plannerDate = clampISO(realToday);
+let calCursor = (() => { const d = parseISO(clampISO(realToday)); return { y: d.getFullYear(), m: d.getMonth() }; })();
+let habitCursor = { y: calCursor.y, m: calCursor.m };
+let weekAnchor = clampISO(realToday);
+const inboxMoveDates = {};   // inbox item id -> chosen iso date (transient)
+
+/* ---------------- Shared day fragments ---------------- */
+const HOURS = [];
+for (let h = 7; h <= 21; h++) HOURS.push(h);
+
+function focusHTML(iso){
+  const d = getDay(iso);
+  return d.focus.map((f, i) => `
+    <div class="focus-row ${f.done ? 'done' : ''}">
+      <button class="check ${f.done ? 'on' : ''}" data-action="toggle-focus" data-date="${iso}" data-idx="${i}" aria-label="Toggle focus ${i + 1}">${f.done ? ic('check') : ''}</button>
+      <input type="text" placeholder="Focus ${i + 1} — one thing that matters" value="${esc(f.text)}"
+             data-bind="focus" data-date="${iso}" data-idx="${i}" autocomplete="off">
+    </div>`).join('');
+}
+function scheduleHTML(iso){
+  const d = getDay(iso);
+  return HOURS.map(h => `
+    <div class="sched-row">
+      <span class="sched-time">${h}:00</span>
+      <input type="text" value="${esc(d.schedule[h] || '')}" placeholder=""
+             data-bind="schedule" data-date="${iso}" data-hour="${h}" autocomplete="off">
+    </div>`).join('');
+}
+function todosHTML(iso){
+  const d = getDay(iso);
+  if (!d.todos.length) return '<p class="empty-note">Nothing here yet. Add one small thing — or none. Both are fine.</p>';
+  return d.todos.map(t => `
+    <div class="todo-row ${t.done ? 'done' : ''}">
+      <button class="check ${t.done ? 'on' : ''}" data-action="toggle-todo" data-date="${iso}" data-tid="${t.id}" aria-label="Toggle to-do">${t.done ? ic('check') : ''}</button>
+      <span class="todo-text">${esc(t.text)}</span>
+      <button class="icon-btn" data-action="del-todo" data-date="${iso}" data-tid="${t.id}" aria-label="Delete to-do">×</button>
+    </div>`).join('');
+}
+function habitsTodayHTML(iso){
+  const checks = state.habitChecks[iso] || {};
+  if (!state.habits.length) return '<p class="empty-note">No habits yet — add some in the Habits tab.</p>';
+  return `<div class="chip-row">${state.habits.map(h => `
+    <button class="chip ${checks[h.id] ? 'on' : ''}" data-action="habit-toggle" data-date="${iso}" data-hid="${h.id}">${checks[h.id] ? ic('check') : ''}${esc(h.name)}</button>`).join('')}</div>`;
+}
+
+/* ---------------- View: Today ---------------- */
+function renderToday(){
+  const iso = realToday;
+  const el = document.getElementById('view-today');
+  const nm = (typeof prefs !== 'undefined' && prefs.name) ? prefs.name.trim() : '';
+  const greet = nm ? `<p class="greeting">Good ${dayPart()}, ${esc(nm)}.</p>` : '';
+  el.innerHTML = `
+    <div class="view-head">
+      <h1>${fmtLong(iso)}</h1>
+      ${greet}
+      <p class="sub">Today first. Set your three focuses, dump everything else out of your head, and let the rest be optional.</p>
+    </div>
+
+    <div class="card focus-card">
+      <h2>Top 3 Focus</h2>
+      <p class="hint">Three is plenty. Finished or not, today still counts.</p>
+      ${focusHTML(iso)}
+    </div>
+
+    <div class="card">
+      <h2>Brain Dump</h2>
+      <p class="hint">Whatever is looping in your head — put it here. Sorting is optional and can always wait.</p>
+      <div class="add-row">
+        <input type="text" class="text-input" id="todayDumpInput" placeholder="Type it, tap Add, forget it…" autocomplete="off">
+        <button class="btn gold" data-action="dump-add" data-source="todayDumpInput">Add</button>
+      </div>
+    </div>
+
+    <div class="grid-2 section-gap">
+      <div class="card">
+        <h2>Today’s Habits</h2>
+        <p class="hint">Tap what happened. Skips are just information, never failures.</p>
+        ${habitsTodayHTML(iso)}
+      </div>
+      <div class="card">
+        <h2>Parking Lot</h2>
+        <p class="hint">Ideas and “later” thoughts live here so they stop interrupting.</p>
+        <textarea class="text-area" placeholder="Park it here…" data-bind="parking" data-date="${iso}">${esc(getDay(iso).parking)}</textarea>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Day Schedule</h2>
+      <p class="hint">A gentle shape for the day — tap any hour and type. Blank hours are allowed.</p>
+      ${scheduleHTML(iso)}
+    </div>`;
+}
+
+/* ---------------- View: Planner (daily) ---------------- */
+function renderPlanner(){
+  const iso = plannerDate;
+  const d = getDay(iso);
+  const el = document.getElementById('view-planner');
+  const moodLabels = ['Rough', 'Low', 'Okay', 'Good', 'Great'];
+  const energyLabels = ['Empty', 'Low', 'Steady', 'Strong', 'Charged'];
+  const pills = (kind, val, labels) => `
+    <div class="pill-row">
+      <span class="pill-label">${kind === 'mood' ? ic('mood') + 'Mood' : ic('bolt') + 'Energy'}</span>
+      ${[1,2,3,4,5].map(n => `<button class="pill ${val === n ? 'on' : ''}" data-action="set-scale" data-kind="${kind}" data-val="${n}" data-date="${iso}" aria-label="${kind} ${n} of 5">${n}</button>`).join('')}
+    </div>
+    <div class="pill-scale"><span>1 · ${labels[0]}</span><span>5 · ${labels[4]}</span></div>`;
+  const glasses = [1,2,3,4,5,6,7,8].map(n =>
+    `<button class="glass ${d.water >= n ? 'on' : ''}" data-action="water" data-date="${iso}" data-n="${n}" aria-label="${n} glasses of water">${ic('drop')}</button>`).join('');
+
+  el.innerHTML = `
+    <div class="view-head">
+      <h1>Daily Planner</h1>
+      <p class="sub">One day at a time. Everything on this page saves itself.</p>
+    </div>
+    <div class="date-nav">
+      <button class="btn ghost small" data-action="planner-prev">← Prev day</button>
+      <span class="date-label">${fmtLong(iso)}</span>
+      <button class="btn ghost small" data-action="planner-next">Next day →</button>
+      <span class="spacer"></span>
+      <input type="date" class="text-input" style="width:auto" id="plannerDateInput" value="${iso}" min="${RANGE_MIN}" max="${RANGE_MAX}">
+      <button class="btn ghost small" data-action="planner-today">Jump to today</button>
+    </div>
+
+    <div class="card focus-card">
+      <h2>Top 3 Focus</h2>
+      <p class="hint">The only “musts” — and even these are allowed to move.</p>
+      ${focusHTML(iso)}
+    </div>
+
+    <div class="grid-2 section-gap">
+      <div class="card">
+        <h2>To-Do List</h2>
+        ${todosHTML(iso)}
+        <div class="add-row">
+          <input type="text" class="text-input" placeholder="Add a to-do…" data-newtodo="${iso}" autocomplete="off">
+          <button class="btn" data-action="todo-add" data-date="${iso}">Add</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Check-In</h2>
+        <p class="hint">A quick snapshot. No scores, no judgement.</p>
+        ${pills('mood', d.mood, moodLabels)}
+        <div style="height:10px"></div>
+        ${pills('energy', d.energy, energyLabels)}
+        <h3 style="margin-top:18px">Water</h3>
+        <div class="glasses">${glasses}</div>
+        <p class="hint" style="margin-top:8px">${d.water} of 8 glasses — tap to update.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Day Schedule</h2>
+      <p class="hint">Tap an hour and type. It’s a sketch, not a contract.</p>
+      ${scheduleHTML(iso)}
+    </div>
+
+    <div class="card">
+      <h2>Notes</h2>
+      <p class="hint">Anything about today that doesn’t fit anywhere else.</p>
+      <textarea class="text-area" style="min-height:120px" placeholder="Notes for ${fmtShort(iso)}…" data-bind="notes" data-date="${iso}">${esc(d.notes)}</textarea>
+    </div>`;
+}
+
+/* ---------------- View: Calendar ---------------- */
+function renderCalendar(){
+  const el = document.getElementById('view-calendar');
+  const { y, m } = calCursor;
+  const first = new Date(y, m, 1);
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const monStart = (typeof prefs !== 'undefined' && prefs.weekStart === 'mon');
+  const startBlank = monStart ? (first.getDay() + 6) % 7 : first.getDay();
+  const DOW_ORDER = monStart ? DOW_SHORT.slice(1).concat(DOW_SHORT[0]) : DOW_SHORT;
+  let cells = '';
+  for (let i = 0; i < startBlank; i++) cells += '<div class="cal-day blank"></div>';
+  for (let day = 1; day <= daysInMonth; day++) {
+    const iso = isoOf(new Date(y, m, day));
+    const cls = ['cal-day'];
+    if (iso === realToday) cls.push('today');
+    if (iso === plannerDate) cls.push('selected');
+    cells += `<button class="${cls.join(' ')}" data-action="cal-day" data-date="${iso}">${day}${dayHasData(iso) ? '<span class="dot"></span>' : ''}</button>`;
+  }
+  const jumpOptions = [];
+  for (let yy = 2026; yy <= 2027; yy++) {
+    for (let mm = 0; mm < 12; mm++) {
+      const sel = (yy === y && mm === m) ? ' selected' : '';
+      jumpOptions.push(`<option value="${yy}-${mm}"${sel}>${MONTH_NAMES[mm]} ${yy}</option>`);
+    }
+  }
+  const atStart = (y === 2026 && m === 0);
+  const atEnd = (y === 2027 && m === 11);
+  el.innerHTML = `
+    <div class="view-head">
+      <h1>Calendar</h1>
+      <p class="sub">A gold dot means something lives on that day. Tap any day to open it in the Planner.</p>
+    </div>
+    <div class="card">
+      <div class="cal-head">
+        <button class="btn ghost small" data-action="cal-prev" ${atStart ? 'disabled' : ''}>← Prev</button>
+        <span class="date-label">${MONTH_NAMES[m]} ${y}</span>
+        <button class="btn ghost small" data-action="cal-next" ${atEnd ? 'disabled' : ''}>Next →</button>
+        <span class="spacer" style="flex:1"></span>
+        <select class="select-input" id="calJump" style="width:auto">${jumpOptions.join('')}</select>
+      </div>
+      <div class="cal-grid">
+        ${DOW_ORDER.map(d => `<div class="cal-dow">${d}</div>`).join('')}
+        ${cells}
+      </div>
+    </div>`;
+}
+
+/* ---------------- View: Weekly ---------------- */
+function renderWeekly(){
+  const el = document.getElementById('view-weekly');
+  const startISO = weekStartOf(weekAnchor);
+  const endISO = isoOf(addDays(parseISO(startISO), 6));
+  const wk = getWeek(startISO);
+  const rows = [];
+  for (let i = 0; i < 7; i++) {
+    const iso = isoOf(addDays(parseISO(startISO), i));
+    const dd = parseISO(iso);
+    rows.push(`
+      <div class="week-day-row">
+        <div class="week-day-name">${DOW_SHORT[dd.getDay()]}<span>${dd.getDate()} ${MONTH_NAMES[dd.getMonth()].slice(0, 3)}</span></div>
+        <input type="text" class="text-input" placeholder="One-line focus…" value="${esc(wk.focus[iso] || '')}"
+               data-bind="week-focus" data-week="${startISO}" data-date="${iso}" autocomplete="off">
+      </div>`);
+  }
+  el.innerHTML = `
+    <div class="view-head">
+      <h1>Weekly</h1>
+      <p class="sub">The week at a glance — one line per day is enough.</p>
+    </div>
+    <div class="date-nav">
+      <button class="btn ghost small" data-action="week-prev">← Prev week</button>
+      <span class="date-label">${fmtShort(startISO)} — ${fmtShort(endISO)}</span>
+      <button class="btn ghost small" data-action="week-next">Next week →</button>
+      <span class="spacer"></span>
+      <button class="btn ghost small" data-action="week-this">This week</button>
+    </div>
+    <div class="card">
+      <h2>This Week’s Goal</h2>
+      <p class="hint">One goal. If the week goes sideways, the goal can move — you’re the boss of it.</p>
+      <input type="text" class="text-input" placeholder="This week, I’d like to…" value="${esc(wk.goal)}"
+             data-bind="week-goal" data-week="${startISO}" autocomplete="off">
+    </div>
+    <div class="card">
+      <h2>Day by Day</h2>
+      ${rows.join('')}
+    </div>
+    <div class="card">
+      <h2>Weekly Review</h2>
+      <p class="hint">Two kind minutes at the end of the week. Skip it whenever you like.</p>
+      <h3>Wins — big or tiny</h3>
+      <textarea class="text-area" placeholder="What went well, even a little?" data-bind="week-wins" data-week="${startISO}">${esc(wk.wins)}</textarea>
+      <h3 style="margin-top:14px">Let go of</h3>
+      <textarea class="text-area" placeholder="What can stop taking up space?" data-bind="week-letgo" data-week="${startISO}">${esc(wk.letgo)}</textarea>
+      <h3 style="margin-top:14px">Next week</h3>
+      <textarea class="text-area" placeholder="One gentle intention for next week…" data-bind="week-next" data-week="${startISO}">${esc(wk.next)}</textarea>
+    </div>`;
+}
+
+/* ---------------- View: Brain Dump / Inbox ---------------- */
+function renderInbox(){
+  const el = document.getElementById('view-inbox');
+  const items = state.inbox.slice().reverse();
+  const list = items.length ? items.map(it => `
+    <div class="inbox-row">
+      <div class="inbox-text">${esc(it.text)}</div>
+      <div class="inbox-meta">Captured ${fmtShort(it.created)}</div>
+      <div class="inbox-actions">
+        <input type="date" min="${RANGE_MIN}" max="${RANGE_MAX}" value="${esc(inboxMoveDates[it.id] || plannerDate)}" data-movedate="${it.id}" aria-label="Move to this date">
+        <button class="btn small" data-action="inbox-move" data-id="${it.id}">Move to that day’s to-dos ${ic('arrow')}</button>
+        <button class="btn ghost small" data-action="inbox-del" data-id="${it.id}">Delete</button>
+      </div>
+    </div>`).join('')
+    : '<p class="empty-note">Your inbox is empty. An uncluttered mind — enjoy it, it never lasts long.</p>';
+  el.innerHTML = `
+    <div class="view-head">
+      <h1>Brain Dump</h1>
+      <p class="sub">Capture first, sort never-or-later. Nothing here needs a category, a priority, or a plan.</p>
+    </div>
+    <div class="card">
+      <h2>Quick Capture</h2>
+      <div class="add-row">
+        <input type="text" class="text-input" id="inboxInput" placeholder="Out of your head, into here…" autocomplete="off">
+        <button class="btn gold" data-action="dump-add" data-source="inboxInput">Add</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Inbox</h2>
+      <p class="hint">When something is ready to become a task, send it to a day. Everything else can simply stay here.</p>
+      ${list}
+    </div>`;
+}
+
+/* ---------------- View: Habits ---------------- */
+function renderHabits(){
+  const el = document.getElementById('view-habits');
+  const { y, m } = habitCursor;
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const atStart = (y === 2026 && m === 0);
+  const atEnd = (y === 2027 && m === 11);
+  let head = '<tr><th class="habit-name-col">Habit</th>';
+  for (let dnum = 1; dnum <= daysInMonth; dnum++) head += `<th>${dnum}</th>`;
+  head += '</tr>';
+  let monthTotal = 0;
+  const bodyRows = state.habits.map(h => {
+    let cells = '';
+    for (let dnum = 1; dnum <= daysInMonth; dnum++) {
+      const iso = isoOf(new Date(y, m, dnum));
+      const on = !!(state.habitChecks[iso] && state.habitChecks[iso][h.id]);
+      if (on) monthTotal++;
+      const todayCol = (iso === realToday) ? ' today-col' : '';
+      cells += `<td><button class="habit-cell${on ? ' on' : ''}${todayCol}" data-action="habit-toggle" data-date="${iso}" data-hid="${h.id}" aria-label="${esc(h.name)} on ${iso}">${on ? ic('check') : ''}</button></td>`;
+    }
+    return `<tr>
+      <td class="habit-name-cell"><div class="habit-name-wrap">
+        <input type="text" class="habit-name-input" value="${esc(h.name)}" data-bind="habit-name" data-hid="${h.id}" autocomplete="off" aria-label="Habit name">
+        <button class="icon-btn" data-action="habit-del" data-hid="${h.id}" aria-label="Remove habit">×</button>
+      </div></td>${cells}</tr>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="view-head">
+      <h1>Habits</h1>
+      <p class="sub">Tap a square on the days it happens. There are deliberately no streaks here — every tap counts on its own.</p>
+    </div>
+    <div class="card">
+      <div class="cal-head">
+        <button class="btn ghost small" data-action="habit-prev" ${atStart ? 'disabled' : ''}>← Prev</button>
+        <span class="date-label">${MONTH_NAMES[m]} ${y}</span>
+        <button class="btn ghost small" data-action="habit-next" ${atEnd ? 'disabled' : ''}>Next →</button>
+        <span class="spacer" style="flex:1"></span>
+        <button class="btn small" data-action="habit-add" ${state.habits.length >= 8 ? 'disabled' : ''}>${ic('plus')} Add habit</button>
+      </div>
+      <div class="habit-scroll">
+        <table class="habit-table"><thead>${head}</thead><tbody>${bodyRows}</tbody></table>
+      </div>
+      <p class="habit-count"><strong>${monthTotal}</strong> check-ins logged in ${MONTH_NAMES[m]} — every single one counts.${state.habits.length >= 8 ? ' (Maximum of 8 habits — small lists get done.)' : ''}</p>
+      <p class="hint" style="margin-top:6px">Tip: tap a habit’s name to rename it. Fewer, kinder habits beat a long list you avoid.</p>
+    </div>`;
+}
+
+/* ---------------- View: Routines ---------------- */
+const ROUTINE_META = [
+  { key: 'morning', title: 'Morning Routine', hint: 'The on-ramp to the day. Short on purpose.' },
+  { key: 'evening', title: 'Evening Routine', hint: 'Land the day gently and set tomorrow up kindly.' },
+  { key: 'reset', title: 'Reset — Low-Spoon Day', hint: 'For the days when everything is too much. This tiny list is the whole plan, and it is enough.' }
+];
+function renderRoutines(){
+  const el = document.getElementById('view-routines');
+  const iso = realToday;
+  const dayChecks = state.routineChecks[iso] || {};
+  const cards = ROUTINE_META.map(meta => {
+    const items = state.routines[meta.key] || [];
+    const checks = dayChecks[meta.key] || {};
+    const rows = items.length ? items.map(it => `
+      <div class="routine-row ${checks[it.id] ? 'done' : ''}">
+        <button class="check ${checks[it.id] ? 'on' : ''}" data-action="routine-toggle" data-list="${meta.key}" data-rid="${it.id}" data-date="${iso}" aria-label="Toggle routine step">${checks[it.id] ? ic('check') : ''}</button>
+        <span class="routine-text">${esc(it.text)}</span>
+        <button class="icon-btn" data-action="routine-del" data-list="${meta.key}" data-rid="${it.id}" aria-label="Delete routine step">×</button>
+      </div>`).join('') : '<p class="empty-note">No steps yet — add your own below.</p>';
+    return `
+      <div class="card">
+        <h2>${meta.title}</h2>
+        <p class="hint">${meta.hint}</p>
+        ${rows}
+        <div class="add-row">
+          <input type="text" class="text-input" placeholder="Add a step…" data-newroutine="${meta.key}" autocomplete="off">
+          <button class="btn" data-action="routine-add" data-list="${meta.key}">Add</button>
+        </div>
+      </div>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="view-head">
+      <h1>Routines</h1>
+      <p class="sub">Checked for today — ${fmtLong(iso)}. Tomorrow they quietly reset; nothing carries over, nothing is “owed”.</p>
+    </div>
+    ${cards}`;
+}
+
+/* ---------------- View: Notes ---------------- */
+function renderNotes(){
+  const el = document.getElementById('view-notes');
+  const list = state.notes.length ? state.notes.map(n => `
+    <div class="note-card">
+      <div class="note-head">
+        <input type="text" class="note-title" placeholder="Note title…" value="${esc(n.title)}" data-bind="note-title" data-nid="${n.id}">
+        <button class="icon-btn" data-action="note-del" data-nid="${n.id}" aria-label="Delete note">×</button>
+      </div>
+      <textarea class="note-body" placeholder="Write freely…" data-bind="note-body" data-nid="${n.id}">${esc(n.body)}</textarea>
+    </div>`).join('')
+    : '<p class="empty-note">No notes yet. Tap “New note” and start typing — it saves itself.</p>';
+  el.innerHTML = `
+    <div class="view-head">
+      <h1>Notes</h1>
+      <p class="sub">A quiet place for longer thoughts. Autosaved, unfiled, unjudged.</p>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <h2 style="margin:0">All Notes</h2>
+        <button class="btn gold small" data-action="note-add">${ic('plus')} New note</button>
+      </div>
+    </div>
+    ${list}`;
+}
+
+/* ---------------- Navigation & rendering ---------------- */
+const RENDERERS = {
+  today: renderToday,
+  calendar: renderCalendar,
+  planner: renderPlanner,
+  weekly: renderWeekly,
+  inbox: renderInbox,
+  habits: renderHabits,
+  routines: renderRoutines,
+  notes: renderNotes,
+  settings: function(){ /* static markup */ }
+};
+function renderCurrent(){
+  const fn = RENDERERS[currentView];
+  if (fn) fn();
+}
+function showView(name){
+  currentView = name;
+  document.querySelectorAll('.view').forEach(v => { v.classList.remove('active'); v.classList.remove('entering'); });
+  const sec = document.getElementById('view-' + name);
+  if (sec) {
+    sec.classList.add('active');
+    sec.classList.add('entering');   // one-shot card entrance; removed so in-view re-renders stay still
+    setTimeout(() => sec.classList.remove('entering'), 520);
+  }
+  document.querySelectorAll('#mainNav .nav-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === name));
+  renderCurrent();
+  window.scrollTo({ top: 0 });
+}
+function rerender(){ renderCurrent(); }   // after a mutation inside the current view
+
+/* ---------------- Text input bindings (no re-render: keeps focus) ---------------- */
+document.addEventListener('input', function(e){
+  const el = e.target;
+  const bind = el.dataset ? el.dataset.bind : null;
+  if (el.dataset && el.dataset.pref === 'name') {
+    prefs.name = el.value;
+    savePrefs();
+    const owner = document.getElementById('brandOwner');
+    if (owner) {
+      const nm = el.value.trim();
+      owner.textContent = nm ? nm + '’s Planner' : '';
+      owner.style.display = nm ? '' : 'none';
+    }
+    return;
+  }
+  if (bind) {
+    const date = el.dataset.date;
+    switch (bind) {
+      case 'focus': {
+        const d = ensureDay(date);
+        d.focus[Number(el.dataset.idx)].text = el.value;
+        break;
+      }
+      case 'schedule': ensureDay(date).schedule[el.dataset.hour] = el.value; break;
+      case 'notes':    ensureDay(date).notes = el.value; break;
+      case 'parking':  ensureDay(date).parking = el.value; break;
+      case 'week-goal':  ensureWeek(el.dataset.week).goal = el.value; break;
+      case 'week-focus': ensureWeek(el.dataset.week).focus[date] = el.value; break;
+      case 'week-wins':  ensureWeek(el.dataset.week).wins = el.value; break;
+      case 'week-letgo': ensureWeek(el.dataset.week).letgo = el.value; break;
+      case 'week-next':  ensureWeek(el.dataset.week).next = el.value; break;
+      case 'habit-name': {
+        const h = state.habits.find(x => x.id === el.dataset.hid);
+        if (h) h.name = el.value;
+        break;
+      }
+      case 'note-title': {
+        const n = state.notes.find(x => x.id === el.dataset.nid);
+        if (n) n.title = el.value;
+        break;
+      }
+      case 'note-body': {
+        const n = state.notes.find(x => x.id === el.dataset.nid);
+        if (n) n.body = el.value;
+        break;
+      }
+    }
+    save();
+    return;
+  }
+  if (el.dataset && el.dataset.movedate) {
+    inboxMoveDates[el.dataset.movedate] = el.value;
+  }
+});
+
+/* Enter key submits the single-line "add" inputs */
+document.addEventListener('keydown', function(e){
+  if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
+  const t = e.target;
+  if (t.id === 'todayDumpInput' || t.id === 'inboxInput') {
+    e.preventDefault();
+    addToInbox(t);
+  } else if (t.dataset && t.dataset.newtodo) {
+    e.preventDefault();
+    addTodo(t.dataset.newtodo, t);
+  } else if (t.dataset && t.dataset.newroutine) {
+    e.preventDefault();
+    addRoutineItem(t.dataset.newroutine, t);
+  }
+});
+
+/* ---------------- Change events (date pickers, selects, import) ---------------- */
+document.addEventListener('change', function(e){
+  const el = e.target;
+  if (el.id === 'plannerDateInput') {
+    if (el.value) { plannerDate = clampISO(el.value); renderPlanner(); }
+  } else if (el.id === 'calJump') {
+    const parts = el.value.split('-').map(Number);
+    calCursor = { y: parts[0], m: parts[1] };
+    renderCalendar();
+  } else if (el.id === 'prefHome') {
+    if (PREF_VIEWS.includes(el.value)) { prefs.home = el.value; savePrefs(); }
+  } else if (el.id === 'importFile') {
+    importData(el);
+  } else if (el.dataset && el.dataset.movedate) {
+    inboxMoveDates[el.dataset.movedate] = el.value;
+  }
+});
+
+/* ---------------- Mutations ---------------- */
+function addToInbox(inputEl){
+  const text = (inputEl.value || '').trim();
+  if (!text) return;
+  state.inbox.push({ id: uid(), text: text, created: todayISO() });
+  inputEl.value = '';
+  save();
+  rerender();   // refreshes Today counts / Inbox list; harmless if typed elsewhere
+}
+function addTodo(iso, inputEl){
+  const text = (inputEl.value || '').trim();
+  if (!text) return;
+  ensureDay(iso).todos.push({ id: uid(), text: text, done: false });
+  save();
+  rerender();
+  const again = document.querySelector('[data-newtodo="' + iso + '"]');
+  if (again) again.focus();
+}
+function addRoutineItem(listKey, inputEl){
+  const text = (inputEl.value || '').trim();
+  if (!text) return;
+  state.routines[listKey].push({ id: uid(), text: text });
+  save();
+  rerender();
+  const again = document.querySelector('[data-newroutine="' + listKey + '"]');
+  if (again) again.focus();
+}
+
+/* ---------------- Click actions ---------------- */
+document.addEventListener('click', function(e){
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const action = el.dataset.action;
+  const date = el.dataset.date;
+
+  switch (action) {
+    case 'nav':
+      showView(el.dataset.view);
+      break;
+
+    case 'toggle-focus': {
+      const d = ensureDay(date);
+      const f = d.focus[Number(el.dataset.idx)];
+      f.done = !f.done;
+      save(); rerender();
+      if (d.focus.every(x => x.done)) {   // all three done: one gentle gold pulse on the Top 3 card
+        const card = document.querySelector('.view.active .focus-card');
+        if (card) { card.classList.add('glow'); setTimeout(() => card.classList.remove('glow'), 1150); }
+      }
+      break;
+    }
+    case 'toggle-todo': {
+      const d = ensureDay(date);
+      const t = d.todos.find(x => x.id === el.dataset.tid);
+      if (t) { t.done = !t.done; save(); rerender(); }
+      break;
+    }
+    case 'del-todo': {
+      const d = ensureDay(date);
+      d.todos = d.todos.filter(x => x.id !== el.dataset.tid);
+      save(); rerender();
+      break;
+    }
+    case 'todo-add': {
+      const input = document.querySelector('[data-newtodo="' + date + '"]');
+      if (input) addTodo(date, input);
+      break;
+    }
+    case 'set-scale': {
+      const d = ensureDay(date);
+      const kind = el.dataset.kind;             // 'mood' | 'energy'
+      const val = Number(el.dataset.val);
+      d[kind] = (d[kind] === val) ? 0 : val;    // tap again to clear — no pressure
+      save(); rerender();
+      break;
+    }
+    case 'water': {
+      const d = ensureDay(date);
+      const n = Number(el.dataset.n);
+      d.water = (d.water === n) ? n - 1 : n;
+      save(); rerender();
+      break;
+    }
+    case 'dump-add': {
+      const input = document.getElementById(el.dataset.source);
+      if (input) addToInbox(input);
+      break;
+    }
+
+    /* Planner navigation */
+    case 'planner-prev':
+      plannerDate = clampISO(isoOf(addDays(parseISO(plannerDate), -1)));
+      renderPlanner();
+      break;
+    case 'planner-next':
+      plannerDate = clampISO(isoOf(addDays(parseISO(plannerDate), 1)));
+      renderPlanner();
+      break;
+    case 'planner-today':
+      plannerDate = clampISO(realToday);
+      renderPlanner();
+      break;
+
+    /* Calendar */
+    case 'cal-prev':
+      if (calCursor.m === 0) { calCursor = { y: calCursor.y - 1, m: 11 }; } else { calCursor.m--; }
+      renderCalendar();
+      break;
+    case 'cal-next':
+      if (calCursor.m === 11) { calCursor = { y: calCursor.y + 1, m: 0 }; } else { calCursor.m++; }
+      renderCalendar();
+      break;
+    case 'cal-day':
+      plannerDate = el.dataset.date;
+      showView('planner');
+      break;
+
+    /* Weekly navigation */
+    case 'week-prev':
+      weekAnchor = isoOf(addDays(parseISO(weekAnchor), -7));
+      renderWeekly();
+      break;
+    case 'week-next':
+      weekAnchor = isoOf(addDays(parseISO(weekAnchor), 7));
+      renderWeekly();
+      break;
+    case 'week-this':
+      weekAnchor = clampISO(realToday);
+      renderWeekly();
+      break;
+
+    /* Inbox */
+    case 'inbox-del':
+      state.inbox = state.inbox.filter(x => x.id !== el.dataset.id);
+      delete inboxMoveDates[el.dataset.id];
+      save(); rerender();
+      break;
+    case 'inbox-move': {
+      const item = state.inbox.find(x => x.id === el.dataset.id);
+      if (!item) break;
+      const target = clampISO(inboxMoveDates[item.id] || plannerDate);
+      ensureDay(target).todos.push({ id: uid(), text: item.text, done: false });
+      state.inbox = state.inbox.filter(x => x.id !== item.id);
+      delete inboxMoveDates[item.id];
+      save(); rerender();
+      break;
+    }
+
+    /* Habits */
+    case 'habit-toggle': {
+      if (!state.habitChecks[date]) state.habitChecks[date] = {};
+      const checks = state.habitChecks[date];
+      if (checks[el.dataset.hid]) delete checks[el.dataset.hid];
+      else checks[el.dataset.hid] = true;
+      save(); rerender();
+      const tgl = document.querySelector('.view.active [data-action="habit-toggle"][data-date="' + date + '"][data-hid="' + el.dataset.hid + '"]');
+      if (tgl) { tgl.classList.add('pop'); setTimeout(() => tgl.classList.remove('pop'), 320); }
+      break;
+    }
+    case 'habit-add':
+      if (state.habits.length < 8) {
+        state.habits.push({ id: uid(), name: 'New habit' });
+        save(); rerender();
+      }
+      break;
+    case 'habit-del': {
+      if (state.habits.length <= 1) break;
+      const hid = el.dataset.hid;
+      state.habits = state.habits.filter(h => h.id !== hid);
+      Object.keys(state.habitChecks).forEach(k => { delete state.habitChecks[k][hid]; });
+      save(); rerender();
+      break;
+    }
+    case 'habit-prev':
+      if (habitCursor.m === 0) { habitCursor = { y: habitCursor.y - 1, m: 11 }; } else { habitCursor.m--; }
+      renderHabits();
+      break;
+    case 'habit-next':
+      if (habitCursor.m === 11) { habitCursor = { y: habitCursor.y + 1, m: 0 }; } else { habitCursor.m++; }
+      renderHabits();
+      break;
+
+    /* Routines */
+    case 'routine-toggle': {
+      const listKey = el.dataset.list, rid = el.dataset.rid;
+      if (!state.routineChecks[date]) state.routineChecks[date] = { morning: {}, evening: {}, reset: {} };
+      if (!state.routineChecks[date][listKey]) state.routineChecks[date][listKey] = {};
+      const checks = state.routineChecks[date][listKey];
+      if (checks[rid]) delete checks[rid]; else checks[rid] = true;
+      save(); rerender();
+      break;
+    }
+    case 'routine-add': {
+      const input = document.querySelector('[data-newroutine="' + el.dataset.list + '"]');
+      if (input) addRoutineItem(el.dataset.list, input);
+      break;
+    }
+    case 'routine-del': {
+      const listKey = el.dataset.list, rid = el.dataset.rid;
+      state.routines[listKey] = state.routines[listKey].filter(x => x.id !== rid);
+      Object.keys(state.routineChecks).forEach(k => {
+        if (state.routineChecks[k][listKey]) delete state.routineChecks[k][listKey][rid];
+      });
+      save(); rerender();
+      break;
+    }
+
+    /* Notes */
+    case 'note-add':
+      state.notes.unshift({ id: uid(), title: '', body: '' });
+      save(); rerender();
+      break;
+    case 'note-del':
+      state.notes = state.notes.filter(n => n.id !== el.dataset.nid);
+      save(); rerender();
+      break;
+
+    /* Preferences (separate prefs key; planner data untouched) */
+    case 'pref-theme':
+      if (PREF_THEMES.includes(el.dataset.theme)) { prefs.theme = el.dataset.theme; savePrefs(); applyPrefs(); }
+      break;
+    case 'pref-appearance':
+      prefs.appearance = (el.dataset.val === 'dark') ? 'dark' : 'light';
+      savePrefs(); applyPrefs();
+      break;
+    case 'pref-weekstart':
+      prefs.weekStart = (el.dataset.val === 'mon') ? 'mon' : 'sun';
+      savePrefs(); applyPrefs(); rerender();
+      break;
+
+    /* Settings */
+    case 'export':
+      exportData();
+      break;
+    case 'clear-all':
+      if (window.confirm('Clear ALL planner data from this browser? Days, habits, routines and notes will be permanently removed.')) {
+        try { localStorage.removeItem(STORE_KEY); } catch (err) {}
+        state = seedState();
+        plannerDate = clampISO(realToday);
+        weekAnchor = clampISO(realToday);
+        calCursor = { y: parseISO(plannerDate).getFullYear(), m: parseISO(plannerDate).getMonth() };
+        habitCursor = { y: calCursor.y, m: calCursor.m };
+        Object.keys(inboxMoveDates).forEach(k => delete inboxMoveDates[k]);
+        save();
+        showView('today');
+      }
+      break;
+  }
+});
+
+/* ---------------- Export / import ---------------- */
+function exportData(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'FedorianStudio-ADHD-Planner-backup-' + todayISO() + '.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+function importData(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(){
+    try {
+      const parsed = JSON.parse(reader.result);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('bad shape');
+      const fresh = seedState();
+      state = Object.assign(fresh, parsed);
+      if (!Array.isArray(state.habits) || !state.habits.length) state.habits = fresh.habits;
+      if (!state.routines || !Array.isArray(state.routines.morning)) state.routines = fresh.routines;
+      if (!state.days || typeof state.days !== 'object') state.days = {};
+      if (!Array.isArray(state.inbox)) state.inbox = [];
+      if (!Array.isArray(state.notes)) state.notes = [];
+      if (!state.habitChecks || typeof state.habitChecks !== 'object') state.habitChecks = {};
+      if (!state.routineChecks || typeof state.routineChecks !== 'object') state.routineChecks = {};
+      if (!state.weeks || typeof state.weeks !== 'object') state.weeks = {};
+      Object.keys(inboxMoveDates).forEach(k => delete inboxMoveDates[k]);
+      save();
+      rerender();
+      window.alert('Your planner data has been imported. Welcome back.');
+    } catch (err) {
+      window.alert('That file could not be imported. Please choose a backup file exported from this planner.');
+    }
+    inputEl.value = '';
+  };
+  reader.readAsText(file);
+}
+
+/* ---------------- Preferences (separate localStorage key; the data key/model are untouched) ---------------- */
+const PREFS_KEY = 'fedorian_adhd_planner_prefs_v1';
+const PREF_THEMES = ['teal', 'midnight', 'forest', 'plum', 'ember'];
+const PREF_VIEWS = ['today', 'calendar', 'planner', 'weekly', 'inbox', 'habits', 'routines', 'notes', 'settings'];
+function loadPrefs(){
+  const dflt = { name: '', theme: 'teal', appearance: 'light', weekStart: 'sun', home: 'today' };
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (raw) {
+      const p = Object.assign({}, dflt, JSON.parse(raw));
+      if (!PREF_THEMES.includes(p.theme)) p.theme = 'teal';
+      if (p.appearance !== 'dark' && p.appearance !== 'light') p.appearance = 'light';
+      if (p.weekStart !== 'mon' && p.weekStart !== 'sun') p.weekStart = 'sun';
+      if (!PREF_VIEWS.includes(p.home)) p.home = 'today';
+      p.name = (typeof p.name === 'string') ? p.name : '';
+      return p;
+    }
+  } catch (e) { /* corrupted prefs fall through to defaults */ }
+  return dflt;
+}
+let prefs = loadPrefs();
+function savePrefs(){
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* storage blocked: prefs just won't persist */ }
+}
+function dayPart(){
+  const h = new Date().getHours();
+  return h < 12 ? 'morning' : (h < 18 ? 'afternoon' : 'evening');
+}
+function applyPrefs(){
+  const de = document.documentElement;
+  de.dataset.theme = prefs.theme;
+  de.dataset.appearance = prefs.appearance;
+  const owner = document.getElementById('brandOwner');
+  if (owner) {
+    const nm = (prefs.name || '').trim();
+    owner.textContent = nm ? nm + '’s Planner' : '';
+    owner.style.display = nm ? '' : 'none';
+  }
+  document.querySelectorAll('[data-action="pref-theme"]').forEach(b => b.classList.toggle('on', b.dataset.theme === prefs.theme));
+  document.querySelectorAll('[data-action="pref-appearance"]').forEach(b => b.classList.toggle('on', b.dataset.val === prefs.appearance));
+  document.querySelectorAll('[data-action="pref-weekstart"]').forEach(b => b.classList.toggle('on', b.dataset.val === prefs.weekStart));
+  const nameInput = document.getElementById('prefName');
+  if (nameInput && nameInput.value !== prefs.name) nameInput.value = prefs.name || '';
+  const homeSel = document.getElementById('prefHome');
+  if (homeSel) homeSel.value = prefs.home;
+}
+
+/* ---------------- Init ---------------- */
+applyPrefs();
+showView(prefs.home);
+</script>
+</body>
+</html>
