@@ -5,16 +5,77 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>
 /* ============================================================
-   FedorianStudio — INTERACTIVE DEMO seeding (demo file only).
-   Runs before every other script in this file. Pre-fills the
-   planner's own localStorage keys — only when absent — so the
-   demo opens on a warm, lived-in "today". Everything is
-   best-effort: any failure leaves the app to open fresh.
+   FedorianStudio — INTERACTIVE DEMO hardening (demo file only).
+   Runs before every other script in this file.
+   (1) Save-stripping shim: wraps localStorage.setItem so writes
+       to the planner data key keep only the rolling 7-day demo
+       window (today −1 … today +5): out-of-window `days` entries
+       and non-intersecting `weeks` entries are removed before
+       persisting. Everything else passes through untouched, and
+       any parse failure passes the write through untouched.
+   (2) Session reset + seeding: each NEW browser session (tracked
+       via a sessionStorage flag) first clears both planner keys,
+       then the original only-if-absent seeding pre-fills a warm,
+       lived-in "today". Same-session refreshes keep the
+       visitor's data. Everything is best-effort: any failure
+       leaves the app behaving exactly like the product.
    ============================================================ */
+(function(){
+  try {
+    var DATA_KEY = 'fedorian_adhd_planner_v1';
+    var pad = function(n){ return String(n).padStart(2, '0'); };
+    var isoOfDate = function(d){ return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+    var shiftISO = function(s, n){
+      var p = s.split('-').map(Number);
+      var d = new Date(p[0], p[1] - 1, p[2]);
+      d.setDate(d.getDate() + n);
+      return isoOfDate(d);
+    };
+    var origSetItem = localStorage.setItem;
+    localStorage.setItem = function(key, value){
+      if (key === DATA_KEY && typeof value === 'string') {
+        try {
+          var obj = JSON.parse(value);
+          if (obj && typeof obj === 'object') {
+            var today = isoOfDate(new Date());
+            var winStart = shiftISO(today, -1);
+            var winEnd = shiftISO(today, 5);
+            var removed = false;
+            if (obj.days && typeof obj.days === 'object') {
+              Object.keys(obj.days).forEach(function(k){
+                if (k < winStart || k > winEnd) { delete obj.days[k]; removed = true; }
+              });
+            }
+            if (obj.weeks && typeof obj.weeks === 'object') {
+              Object.keys(obj.weeks).forEach(function(k){
+                if (shiftISO(k, 6) < winStart || k > winEnd) { delete obj.weeks[k]; removed = true; }
+              });
+            }
+            if (removed) {
+              value = JSON.stringify(obj);
+              try { if (typeof window.__fedorianDemoToast === 'function') window.__fedorianDemoToast('save'); } catch (e2) {}
+            }
+          }
+        } catch (e) { /* unparseable payload: pass the write through untouched */ }
+      }
+      return origSetItem.call(localStorage, key, value);
+    };
+  } catch (e) { /* shim failed to install: saving behaves exactly like the product */ }
+})();
 (function(){
   try {
     var PREFS_KEY = 'fedorian_adhd_planner_prefs_v1';
     var DATA_KEY = 'fedorian_adhd_planner_v1';
+    var SESSION_KEY = 'fedorian_demo_session_v1';
+    /* New browser session: reset both keys to the factory sample state.
+       sessionStorage is per-tab/per-session; if it is unavailable the
+       demo falls back to the original only-if-absent seeding below. */
+    var newSession = false;
+    try { newSession = !sessionStorage.getItem(SESSION_KEY); } catch (e) { newSession = false; }
+    if (newSession) {
+      try { localStorage.removeItem(PREFS_KEY); localStorage.removeItem(DATA_KEY); } catch (e) {}
+      try { sessionStorage.setItem(SESSION_KEY, '1'); } catch (e) {}
+    }
     if (!localStorage.getItem(PREFS_KEY)) {
       localStorage.setItem(PREFS_KEY, JSON.stringify({
         name: 'Alex', theme: 'teal', appearance: 'light', weekStart: 'sun', home: 'today'
@@ -465,6 +526,19 @@ html.demo-off .app{ min-height:100vh }
   letter-spacing:.18em; background:#C7A15C; color:#0B383B; border-radius:999px;
   padding:3px 8px 2px; vertical-align:middle; margin-left:6px;
 }
+#demoToast{
+  position:fixed; left:50%; bottom:24px; transform:translate(-50%,16px); z-index:400;
+  max-width:min(540px,calc(100vw - 32px));
+  background:#0B383B; color:#F7F3EC; border:1px solid rgba(199,161,92,.55); border-left:4px solid #C7A15C;
+  border-radius:12px; padding:13px 16px; box-shadow:0 12px 32px rgba(11,56,59,.35);
+  font-family:'Montserrat',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  font-size:13.5px; line-height:1.5;
+  opacity:0; pointer-events:none; transition:opacity .25s ease,transform .25s ease;
+}
+#demoToast.show{ opacity:1; transform:translate(-50%,0); pointer-events:auto }
+#demoToast a{ color:#C7A15C; font-weight:800; text-decoration:none; white-space:nowrap }
+#demoToast a:hover{ text-decoration:underline }
+@media (max-width:860px){ #demoToast{ bottom:82px } }
 @media (max-width:560px){
   #demoBanner{ font-size:10.5px; letter-spacing:.08em; gap:8px }
 }
@@ -476,7 +550,7 @@ html.demo-off .app{ min-height:100vh }
 </head>
 <body>
 <div id="demoBanner" role="note">
-  <span class="demo-label">INTERACTIVE DEMO — FedorianStudio ADHD Planner 2026–2027</span>
+  <span class="demo-label">INTERACTIVE DEMO — this week free · Full version: all of 2026–2027</span>
   <a href="https://www.etsy.com/shop/FedorianStudio" target="_blank" rel="noopener">Get the full planner on Etsy →</a>
   <button class="demo-x" id="demoBannerX" type="button" aria-label="Dismiss demo banner">×</button>
 </div>
@@ -1612,6 +1686,105 @@ function applyPrefs(){
 /* ---------------- Init ---------------- */
 applyPrefs();
 showView(prefs.home);
+</script>
+<script>
+/* ============================================================
+   Demo limits (demo file only — not part of the product):
+   upgrade toast + rolling 7-day navigation guard. The guard
+   runs in the capture phase, so gated clicks/changes never
+   reach the app's own handlers; no app function is modified.
+   The window is anchored on the viewer's real today:
+   [today −1 … today +5] inclusive. Dates inside the window
+   behave exactly like the product. Any doubt (missing app
+   globals, unexpected shapes) fails OPEN: the demo must never
+   be more broken than the product.
+   ============================================================ */
+(function(){
+  var ETSY_URL = 'https://www.etsy.com/shop/FedorianStudio';
+  var MESSAGES = {
+    nav: 'The demo covers this week only — the full planner unlocks all of 2026–2027.',
+    save: 'Demo limit: only this week is saved — the full planner saves all of 2026–2027.'
+  };
+  function pad(n){ return String(n).padStart(2, '0'); }
+  function isoOf(d){ return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function parseISO(s){ var p = String(s).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+  function shiftISO(s, n){ var d = parseISO(s); d.setDate(d.getDate() + n); return isoOf(d); }
+  function winStart(){ return shiftISO(isoOf(new Date()), -1); }
+  function winEnd(){ return shiftISO(isoOf(new Date()), 5); }
+  function inWindow(iso){
+    return typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(iso) && iso >= winStart() && iso <= winEnd();
+  }
+  function weekIntersects(startIso){ return shiftISO(startIso, 6) >= winStart() && startIso <= winEnd(); }
+
+  /* --- Upgrade toast (one element, reused for every limit) --- */
+  var toastEl = null, toastTimer = null;
+  function ensureToast(){
+    if (toastEl) return toastEl;
+    toastEl = document.createElement('div');
+    toastEl.id = 'demoToast';
+    toastEl.setAttribute('role', 'status');
+    document.body.appendChild(toastEl);
+    return toastEl;
+  }
+  window.__fedorianDemoToast = function(kind){
+    try {
+      var el = ensureToast();
+      el.innerHTML = '';
+      el.appendChild(document.createTextNode((MESSAGES[kind] || MESSAGES.nav) + ' '));
+      var a = document.createElement('a');
+      a.href = ETSY_URL;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = 'Get it on Etsy →';
+      el.appendChild(a);
+      el.classList.add('show');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 4000);
+    } catch (e) { /* a toast failure must never break the demo */ }
+  };
+
+  /* --- Navigation guard --- */
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    var el = (t && t.closest) ? t.closest('[data-action]') : null;
+    if (!el) return;
+    var action = el.dataset.action, block = false;
+    try {
+      if (action === 'cal-day') {
+        block = !inWindow(el.dataset.date);
+      } else if (action === 'planner-prev') {
+        block = !inWindow(shiftISO(plannerDate, -1));
+      } else if (action === 'planner-next') {
+        block = !inWindow(shiftISO(plannerDate, 1));
+      } else if (action === 'week-prev') {
+        block = !weekIntersects(weekStartOf(shiftISO(weekAnchor, -7)));
+      } else if (action === 'week-next') {
+        block = !weekIntersects(weekStartOf(shiftISO(weekAnchor, 7)));
+      } else if (action === 'inbox-move') {
+        block = !inWindow(clampISO(inboxMoveDates[el.dataset.id] || plannerDate));
+      }
+    } catch (err) { block = false; }
+    if (block) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.__fedorianDemoToast('nav');
+    }
+  }, true);
+
+  document.addEventListener('change', function(e){
+    var el = e.target;
+    if (el && el.id === 'plannerDateInput' && el.value) {
+      var ok = true;
+      try { ok = inWindow(clampISO(el.value)); } catch (err) { ok = true; }
+      if (!ok) {
+        e.preventDefault();
+        e.stopPropagation();
+        try { el.value = plannerDate; } catch (err) {}
+        window.__fedorianDemoToast('nav');
+      }
+    }
+  }, true);
+})();
 </script>
 </body>
 </html>
