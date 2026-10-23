@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B383B">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script>
 /* ============================================================
    FedorianStudio — INTERACTIVE DEMO hardening (demo file only).
@@ -381,6 +384,32 @@ table.habit-table th.habit-name-col,table.habit-table td.habit-name-cell{
   border-radius:12px;padding:14px 16px;font-size:14.5px;color:var(--teal-dark);margin-bottom:16px;
 }
 
+/* ---------- Add to Home Screen ---------- */
+.install-done{display:flex;gap:9px;align-items:center;font-size:14.5px;font-weight:600;color:var(--teal)}
+.sheet-backdrop{
+  position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(11,56,59,.48);z-index:320;
+  display:none;align-items:flex-end;justify-content:center;
+}
+.sheet-backdrop.open{display:flex}
+.sheet{
+  background:var(--ivory);color:var(--ink);border:1px solid var(--border);border-bottom:none;
+  border-radius:20px 20px 0 0;box-shadow:0 -14px 44px rgba(11,56,59,.28);
+  width:100%;max-width:520px;max-height:88vh;max-height:88dvh;overflow-y:auto;
+  padding:26px 24px calc(24px + env(safe-area-inset-bottom));
+  animation:sheetIn .24s ease;
+}
+@keyframes sheetIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@media (min-width:640px){
+  .sheet-backdrop{align-items:center;padding:20px}
+  .sheet{border-radius:20px;border-bottom:1px solid var(--border);padding-bottom:24px}
+}
+.sheet h2{font-size:21px;display:flex;align-items:center;gap:9px;margin-bottom:6px}
+.sheet h2 .ic{width:21px;height:21px;color:var(--gold)}
+.sheet .sheet-sub{font-size:14px;color:var(--ink-soft);margin-bottom:16px}
+.sheet ol{margin:0 0 20px 21px;font-size:14.5px;line-height:1.65}
+.sheet ol li{margin-bottom:7px}
+.sheet ol li:last-child{margin-bottom:0}
+
 /* ---------- Icons & motion ---------- */
 .ic{width:19px;height:19px;flex:0 0 auto}
 .nav-btn .ic{width:20px;height:20px;color:rgba(247,243,236,.55);transition:color .18s ease}
@@ -549,6 +578,12 @@ html.demo-off .app{ min-height:100vh; min-height:100dvh }
 /* Apply the saved theme/appearance before first paint (preferences are managed by the main script below). */
 (function(){ try { var p = JSON.parse(localStorage.getItem('fedorian_adhd_planner_prefs_v1') || '{}'); var de = document.documentElement; if (p.theme) de.dataset.theme = p.theme; if (p.appearance) de.dataset.appearance = p.appearance; } catch (e) {} })();
 </script>
+<script>
+/* Capture Chrome's install prompt the moment it fires (hosted copies only — a local file never triggers it) so Settings can offer the real one-tap prompt instead of the guided steps. preventDefault keeps Chrome's mini-infobar out of the way of our own button. */
+window.__fedorianInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); window.__fedorianInstallPrompt = e; });
+window.addEventListener('appinstalled', function(){ window.__fedorianInstallPrompt = null; });
+</script>
 </head>
 <body>
 <div id="demoBanner" role="note">
@@ -642,6 +677,14 @@ html.demo-off .app{ min-height:100vh; min-height:100dvh }
           <p class="hint" style="margin-top:8px">The tab the planner opens on. Takes effect next time you open it.</p>
         </div>
         <div class="card">
+          <h2>Take it with you</h2>
+          <p class="hint">Put the planner on your home screen — it opens like an app, full-screen, with your data saved on this device.</p>
+          <div class="settings-actions" id="installCta">
+            <button class="btn gold" data-action="install-app"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="7" y="2.8" width="10" height="18.4" rx="2.2"/><path d="M12 7v5.4M9.7 10.2 12 12.5l2.3-2.3M10.6 18h2.8"/></svg>Add to Home Screen</button>
+          </div>
+          <p class="install-done" id="installDone" style="display:none">✓ You're using the home-screen version</p>
+        </div>
+        <div class="card">
           <h2>Back up &amp; restore</h2>
           <p class="hint">Export saves everything — days, habits, routines, notes — as one small file. Import it on any device or browser to pick up right where you left off.</p>
           <div class="settings-actions">
@@ -667,6 +710,18 @@ html.demo-off .app{ min-height:100vh; min-height:100dvh }
       </section>
     </div>
   </main>
+</div>
+
+<!-- Add to Home Screen guided sheet (opened from Settings; the steps are filled in for the visitor's platform by the main script) -->
+<div class="sheet-backdrop" id="installSheet">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="installSheetTitle">
+    <h2 id="installSheetTitle"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="7" y="2.8" width="10" height="18.4" rx="2.2"/><path d="M12 7v5.4M9.7 10.2 12 12.5l2.3-2.3M10.6 18h2.8"/></svg>Add to Home Screen</h2>
+    <p class="sheet-sub">A few quick steps — then the planner is one tap away, full-screen, with everything saved on this device.</p>
+    <ol id="installSteps"></ol>
+    <div class="settings-actions">
+      <button class="btn gold" data-action="install-close">Got it</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1576,6 +1631,14 @@ document.addEventListener('click', function(e){
       savePrefs(); applyPrefs(); rerender();
       break;
 
+    /* Add to Home Screen */
+    case 'install-app':
+      openInstall();
+      break;
+    case 'install-close':
+      closeInstallSheet();
+      break;
+
     /* Settings */
     case 'export':
       exportData();
@@ -1685,8 +1748,77 @@ function applyPrefs(){
   if (homeSel) homeSel.value = prefs.home;
 }
 
+/* ---------------- Add to Home Screen ----------------
+   Hosted copies (the demo) can fire Chrome's real install prompt, captured
+   in the head script. Everywhere else — and on iOS, which never offers a
+   programmatic prompt — the button opens a short guided sheet instead. */
+function isStandalone(){
+  try { if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true; } catch (e) {}
+  return window.navigator.standalone === true;   /* iOS Safari's home-screen flag */
+}
+function refreshInstallCard(){
+  const cta = document.getElementById('installCta');
+  const done = document.getElementById('installDone');
+  if (!cta || !done) return;
+  const solo = isStandalone();
+  cta.style.display = solo ? 'none' : '';
+  done.style.display = solo ? '' : 'none';
+}
+function installStepLines(){
+  const ua = window.navigator.userAgent || '';
+  const iPadOS = /Macintosh/.test(ua) && window.navigator.maxTouchPoints > 1;   /* iPads report themselves as Macs */
+  if (/iPhone|iPad|iPod/.test(ua) || iPadOS) return [
+    'Tap the Share button in Safari’s toolbar.',
+    'Scroll down and tap “Add to Home Screen”.',
+    'Tap Add — the planner now lives on your home screen.'
+  ];
+  if (/Android/.test(ua) || /Mobi/.test(ua)) return [
+    'Tap the ⋮ menu in your browser.',
+    'Tap “Add to Home screen” (or “Install app”).',
+    'Confirm — the planner now lives on your home screen.'
+  ];
+  return [
+    'Bookmark this page (Ctrl/Cmd + D), or pin the file somewhere handy — on a computer the planner is happiest in a browser tab.'
+  ];
+}
+function showInstallSheet(){
+  const list = document.getElementById('installSteps');
+  if (list) {
+    list.innerHTML = '';
+    installStepLines().forEach(function(t){
+      const li = document.createElement('li');
+      li.textContent = t;
+      list.appendChild(li);
+    });
+  }
+  const sheet = document.getElementById('installSheet');
+  if (sheet) sheet.classList.add('open');
+}
+function closeInstallSheet(){
+  const sheet = document.getElementById('installSheet');
+  if (sheet) sheet.classList.remove('open');
+}
+function openInstall(){
+  const evt = window.__fedorianInstallPrompt;
+  if (evt) {
+    window.__fedorianInstallPrompt = null;   /* a captured prompt can only be spent once */
+    try {
+      const pr = evt.prompt();
+      if (pr && typeof pr.catch === 'function') pr.catch(function(){});   /* outcome handled quietly */
+      if (evt.userChoice && typeof evt.userChoice.catch === 'function') evt.userChoice.catch(function(){});
+      return;
+    } catch (e) { /* prompt refused — fall through to the guided steps */ }
+  }
+  showInstallSheet();
+}
+const installSheetEl = document.getElementById('installSheet');
+if (installSheetEl) installSheetEl.addEventListener('click', function(e){ if (e.target === installSheetEl) closeInstallSheet(); });
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeInstallSheet(); });
+window.addEventListener('appinstalled', refreshInstallCard);
+
 /* ---------------- Init ---------------- */
 applyPrefs();
+refreshInstallCard();
 showView(prefs.home);
 </script>
 <script>
@@ -1787,6 +1919,10 @@ showView(prefs.home);
     }
   }, true);
 })();
+</script>
+<script>
+/* PWA install support (demo host only): registering the pass-through service worker is what makes the demo installable in Chrome. Guarded so it can never throw on file:// or in browsers without service workers. */
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) { try { navigator.serviceWorker.register('sw.js').catch(function(){}); } catch (e) {} }
 </script>
 </body>
 </html>
