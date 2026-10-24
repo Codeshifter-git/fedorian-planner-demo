@@ -8,71 +8,22 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script>
 /* ============================================================
-   FedorianStudio — INTERACTIVE DEMO hardening (demo file only).
-   Runs before every other script in this file.
-   (1) Save-stripping shim: wraps localStorage.setItem so writes
-       to the planner data key keep only the rolling 7-day demo
-       window (today −1 … today +5): out-of-window `days` entries
-       and non-intersecting `weeks` entries are removed before
-       persisting. Everything else passes through untouched, and
-       any parse failure passes the write through untouched.
-   (2) Session reset + seeding: each NEW browser session (tracked
-       via a sessionStorage flag) first clears both planner keys,
-       then the original only-if-absent seeding pre-fills a warm,
-       lived-in "today". Same-session refreshes keep the
-       visitor's data. Everything is best-effort: any failure
-       leaves the app behaving exactly like the product.
+   FedorianStudio — INTERACTIVE DEMO, locked-down build (demo
+   file only). This is a REDUCED engine: the only dates it can
+   render are the rolling 7-day demo window (today -1 ... +5),
+   and it contains no export/import code at all. This script
+   runs before every other script in the file and only seeds:
+   each NEW browser session (sessionStorage flag) first clears
+   both planner keys, then pre-fills a warm, lived-in "today"
+   for a persona named Alex. Same-session refreshes keep the
+   visitor's edits. Everything is best-effort: any failure
+   leaves the demo opening fresh.
    ============================================================ */
-(function(){
-  try {
-    var DATA_KEY = 'fedorian_adhd_planner_v1';
-    var pad = function(n){ return String(n).padStart(2, '0'); };
-    var isoOfDate = function(d){ return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
-    var shiftISO = function(s, n){
-      var p = s.split('-').map(Number);
-      var d = new Date(p[0], p[1] - 1, p[2]);
-      d.setDate(d.getDate() + n);
-      return isoOfDate(d);
-    };
-    var origSetItem = localStorage.setItem;
-    localStorage.setItem = function(key, value){
-      if (key === DATA_KEY && typeof value === 'string') {
-        try {
-          var obj = JSON.parse(value);
-          if (obj && typeof obj === 'object') {
-            var today = isoOfDate(new Date());
-            var winStart = shiftISO(today, -1);
-            var winEnd = shiftISO(today, 5);
-            var removed = false;
-            if (obj.days && typeof obj.days === 'object') {
-              Object.keys(obj.days).forEach(function(k){
-                if (k < winStart || k > winEnd) { delete obj.days[k]; removed = true; }
-              });
-            }
-            if (obj.weeks && typeof obj.weeks === 'object') {
-              Object.keys(obj.weeks).forEach(function(k){
-                if (shiftISO(k, 6) < winStart || k > winEnd) { delete obj.weeks[k]; removed = true; }
-              });
-            }
-            if (removed) {
-              value = JSON.stringify(obj);
-              try { if (typeof window.__fedorianDemoToast === 'function') window.__fedorianDemoToast('save'); } catch (e2) {}
-            }
-          }
-        } catch (e) { /* unparseable payload: pass the write through untouched */ }
-      }
-      return origSetItem.call(localStorage, key, value);
-    };
-  } catch (e) { /* shim failed to install: saving behaves exactly like the product */ }
-})();
 (function(){
   try {
     var PREFS_KEY = 'fedorian_adhd_planner_prefs_v1';
     var DATA_KEY = 'fedorian_adhd_planner_v1';
     var SESSION_KEY = 'fedorian_demo_session_v1';
-    /* New browser session: reset both keys to the factory sample state.
-       sessionStorage is per-tab/per-session; if it is unavailable the
-       demo falls back to the original only-if-absent seeding below. */
     var newSession = false;
     try { newSession = !sessionStorage.getItem(SESSION_KEY); } catch (e) { newSession = false; }
     if (newSession) {
@@ -87,20 +38,18 @@
     if (!localStorage.getItem(DATA_KEY)) {
       var pad = function(n){ return String(n).padStart(2, '0'); };
       var now = new Date();
-      var realToday = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
-      /* The planner's range is 2026-2027; its views clamp "today" into it. */
-      var clamped = realToday < '2026-01-01' ? '2026-01-01' : (realToday > '2027-12-31' ? '2027-12-31' : realToday);
+      var today = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
       var uid = function(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); };
       var day = {
         focus: [
-          { text: 'Tap a habit below \u2014 feel it pop', done: false },
+          { text: 'Tap a habit below — feel it pop', done: false },
           { text: 'Brain-dump one thought (Brain Dump tab)', done: false },
-          { text: 'Make it yours in Settings \u2014 try dark mode', done: false }
+          { text: 'Make it yours in Settings — try dark mode', done: false }
         ],
         schedule: {},
         todos: [
-          { id: uid(), text: 'Tick this off \u2014 small wins count', done: false },
-          { id: uid(), text: 'Already done \u2014 that is how a ticked win looks', done: true }
+          { id: uid(), text: 'Tick this off — small wins count', done: false },
+          { id: uid(), text: 'Already done — that is how a ticked win looks', done: true }
         ],
         notes: '',
         mood: 4, energy: 3,
@@ -109,15 +58,14 @@
       };
       var data = {
         days: {},
-        inbox: [ { id: uid(), text: 'Ideas land here first \u2014 nothing gets lost.', created: clamped } ],
+        inbox: [ { id: uid(), text: 'Ideas land here first — nothing gets lost.', created: today } ],
         notes: [ { id: uid(), title: 'Welcome to the demo',
-                   body: 'This is the real planner, running live in your browser. Tap around freely: tick a habit, dump a thought, change the theme in Settings. Everything you type is saved on this device only.' } ]
+                   body: 'This is the planner, running live in your browser. Tap around freely: tick a habit, dump a thought, change the theme in Settings. Everything you type is saved on this device only.' } ]
       };
-      data.days[clamped] = day;
-      if (realToday !== clamped) data.days[realToday] = day;
+      data.days[today] = day;
       localStorage.setItem(DATA_KEY, JSON.stringify(data));
     }
-  } catch (e) { /* seeding failed: the app simply opens fresh */ }
+  } catch (e) { /* seeding failed: the demo simply opens fresh */ }
 })();
 </script>
 <title>FedorianStudio — ADHD Planner 2026–2027</title>
@@ -636,7 +584,7 @@ window.addEventListener('appinstalled', function(){ window.__fedorianInstallProm
       <section class="view" id="view-settings">
         <div class="view-head">
           <h1>Settings &amp; Your Data</h1>
-          <p class="sub">Back up, restore, or start fresh — you are in control.</p>
+          <p class="sub">Make it yours, or start fresh — you are in control.</p>
         </div>
         <div class="privacy-line"><span aria-hidden="true">◆</span><span><strong>Your data never leaves this device</strong> — everything is saved in this browser. No account, no server, no tracking.</span></div>
         <div class="card">
@@ -684,15 +632,6 @@ window.addEventListener('appinstalled', function(){ window.__fedorianInstallProm
           </div>
           <p class="install-done" id="installDone" style="display:none">✓ You're using the home-screen version</p>
         </div>
-        <div class="card">
-          <h2>Back up &amp; restore</h2>
-          <p class="hint">Export saves everything — days, habits, routines, notes — as one small file. Import it on any device or browser to pick up right where you left off.</p>
-          <div class="settings-actions">
-            <button class="btn gold" data-action="export"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 15V4"/><path d="M6.5 8.5 12 3l5.5 5.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>Export my data (JSON)</button>
-            <label class="btn ghost file-label" for="importFile"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4v11"/><path d="M6.5 10.5 12 16l5.5-5.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>Import data</label>
-            <input type="file" id="importFile" accept=".json,application/json">
-          </div>
-        </div>
         <div class="card howto">
           <h2>How to use this planner</h2>
           <p><strong>Start on Today.</strong> The planner opens on today — set your Top 3 Focus and let the rest be optional.</p>
@@ -703,7 +642,7 @@ window.addEventListener('appinstalled', function(){ window.__fedorianInstallProm
         </div>
         <div class="card">
           <h2>Start over</h2>
-          <p class="hint">Clear every day, habit, routine and note from this browser and return to a fresh planner. This cannot be undone — export first if you might want it back.</p>
+          <p class="hint">Clear every day, habit, routine and note from this browser and return to a fresh planner. This cannot be undone.</p>
           <button class="btn danger" data-action="clear-all">Clear all my data</button>
         </div>
         <p style="text-align:center;color:#9AA39E;font-size:12.5px;margin-top:8px">FedorianStudio · ADHD Planner 2026–2027 · A Hastle product</p>
@@ -738,9 +677,15 @@ function isoOf(d){ return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' +
 function parseISO(s){ const p = s.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
 function addDays(d, n){ const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; }
 function todayISO(){ return isoOf(new Date()); }
-const RANGE_MIN = '2026-01-01';
-const RANGE_MAX = '2027-12-31';
-function clampISO(s){ return s < RANGE_MIN ? RANGE_MIN : (s > RANGE_MAX ? RANGE_MAX : s); }
+/* LOCKED DEMO: the only dates that exist in this build are the rolling
+   7-day demo window (today -1 ... today +5). RANGE_MIN / RANGE_MAX ARE the
+   window bounds, computed from the viewer's clock — there is no wider
+   range constant anywhere in this file to widen them back to. */
+const DEMO_NOW = new Date(); DEMO_NOW.setHours(0, 0, 0, 0);
+const RANGE_MIN = isoOf(addDays(DEMO_NOW, -1));
+const RANGE_MAX = isoOf(addDays(DEMO_NOW, 5));
+function inWindow(s){ return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && s >= RANGE_MIN && s <= RANGE_MAX; }
+function clampISO(s){ return inWindow(s) ? s : ((typeof s === 'string' && s < RANGE_MIN) ? RANGE_MIN : RANGE_MAX); }
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DOW_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 function fmtLong(iso){
@@ -834,6 +779,21 @@ function loadState(){
   return seedState();
 }
 let state = loadState();
+
+/* LOCKED DEMO: prune anything a previous (full) demo build may have saved
+   outside the window, so out-of-window days can never resurface here. */
+try {
+  Object.keys(state.days || {}).forEach(k => { if (!inWindow(k)) delete state.days[k]; });
+  Object.keys(state.habitChecks || {}).forEach(k => { if (!inWindow(k)) delete state.habitChecks[k]; });
+  Object.keys(state.routineChecks || {}).forEach(k => { if (!inWindow(k)) delete state.routineChecks[k]; });
+  Object.keys(state.weeks || {}).forEach(k => {
+    const end = isoOf(addDays(parseISO(k), 6));
+    if (k > RANGE_MAX || end < RANGE_MIN) { delete state.weeks[k]; return; }
+    const f = state.weeks[k] && state.weeks[k].focus;
+    if (f) Object.keys(f).forEach(dk => { if (!inWindow(dk)) delete f[dk]; });
+  });
+  (state.inbox || []).forEach(it => { if (it && !inWindow(it.created)) it.created = RANGE_MIN; });
+} catch (e) { /* pruning is best-effort */ }
 let saveTimer = null;
 function save(){
   clearTimeout(saveTimer);
@@ -843,12 +803,14 @@ function save(){
 }
 
 /* Day accessors: getDay never writes; ensureDay creates + returns the stored object */
-function getDay(iso){ return state.days[iso] || blankDay(); }
+function getDay(iso){ return inWindow(iso) ? (state.days[iso] || blankDay()) : blankDay(); }
 function ensureDay(iso){
+  if (!inWindow(iso)) iso = RANGE_MIN;
   if (!state.days[iso]) state.days[iso] = blankDay();
   return state.days[iso];
 }
 function dayHasData(iso){
+  if (!inWindow(iso)) return false;
   const d = state.days[iso];
   if (!d) return false;
   return d.focus.some(f => f.text && f.text.trim())
@@ -861,12 +823,13 @@ function dayHasData(iso){
 
 /* Week helpers (weeks start on Sunday) */
 function weekStartOf(iso){
-  const d = parseISO(iso);
+  const d = parseISO(clampISO(iso));
   const back = (typeof prefs !== 'undefined' && prefs.weekStart === 'mon') ? (d.getDay() + 6) % 7 : d.getDay();
-  return isoOf(addDays(d, -back));
+  return clampISO(isoOf(addDays(d, -back)));
 }
-function getWeek(key){ return state.weeks[key] || { goal:'', focus:{}, wins:'', letgo:'', next:'' }; }
+function getWeek(key){ key = weekStartOf(key); return state.weeks[key] || { goal:'', focus:{}, wins:'', letgo:'', next:'' }; }
 function ensureWeek(key){
+  key = weekStartOf(key);
   if (!state.weeks[key]) state.weeks[key] = { goal:'', focus:{}, wins:'', letgo:'', next:'' };
   return state.weeks[key];
 }
@@ -875,9 +838,19 @@ function ensureWeek(key){
 const realToday = todayISO();
 let currentView = 'today';
 let plannerDate = clampISO(realToday);
-let calCursor = (() => { const d = parseISO(clampISO(realToday)); return { y: d.getFullYear(), m: d.getMonth() }; })();
-let habitCursor = { y: calCursor.y, m: calCursor.m };
 let weekAnchor = clampISO(realToday);
+/* Calendar & Habits page through the demo window one week-row at a time.
+   winPages() is computed lazily (after prefs exist): the week-starts that
+   intersect the window — one or two entries, never more. */
+let calPage = 0;
+let habitPage = 0;
+function winPages(){
+  const pages = [];
+  let s = weekStartOf(RANGE_MIN);
+  let guard = 0;
+  while (s <= RANGE_MAX && guard++ < 4) { pages.push(s); s = isoOf(addDays(parseISO(s), 7)); }
+  return pages;
+}
 const inboxMoveDates = {};   // inbox item id -> chosen iso date (transient)
 
 /* ---------------- Shared day fragments ---------------- */
@@ -1040,30 +1013,25 @@ function renderPlanner(){
 /* ---------------- View: Calendar ---------------- */
 function renderCalendar(){
   const el = document.getElementById('view-calendar');
-  const { y, m } = calCursor;
-  const first = new Date(y, m, 1);
-  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const pages = winPages();
+  if (calPage < 0) calPage = 0;
+  if (calPage > pages.length - 1) calPage = pages.length - 1;
+  const startISO = pages[calPage];
   const monStart = (typeof prefs !== 'undefined' && prefs.weekStart === 'mon');
-  const startBlank = monStart ? (first.getDay() + 6) % 7 : first.getDay();
   const DOW_ORDER = monStart ? DOW_SHORT.slice(1).concat(DOW_SHORT[0]) : DOW_SHORT;
   let cells = '';
-  for (let i = 0; i < startBlank; i++) cells += '<div class="cal-day blank"></div>';
-  for (let day = 1; day <= daysInMonth; day++) {
-    const iso = isoOf(new Date(y, m, day));
-    const cls = ['cal-day'];
-    if (iso === realToday) cls.push('today');
-    if (iso === plannerDate) cls.push('selected');
-    cells += `<button class="${cls.join(' ')}" data-action="cal-day" data-date="${iso}">${day}${dayHasData(iso) ? '<span class="dot"></span>' : ''}</button>`;
-  }
-  const jumpOptions = [];
-  for (let yy = 2026; yy <= 2027; yy++) {
-    for (let mm = 0; mm < 12; mm++) {
-      const sel = (yy === y && mm === m) ? ' selected' : '';
-      jumpOptions.push(`<option value="${yy}-${mm}"${sel}>${MONTH_NAMES[mm]} ${yy}</option>`);
+  for (let i = 0; i < 7; i++) {
+    const iso = isoOf(addDays(parseISO(startISO), i));
+    const dd = parseISO(iso);
+    if (inWindow(iso)) {
+      const cls = ['cal-day'];
+      if (iso === realToday) cls.push('today');
+      if (iso === plannerDate) cls.push('selected');
+      cells += `<button class="${cls.join(' ')}" data-action="cal-day" data-date="${iso}">${dd.getDate()}${dayHasData(iso) ? '<span class="dot"></span>' : ''}</button>`;
+    } else {
+      cells += '<div class="cal-day blank"></div>';
     }
   }
-  const atStart = (y === 2026 && m === 0);
-  const atEnd = (y === 2027 && m === 11);
   el.innerHTML = `
     <div class="view-head">
       <h1>Calendar</h1>
@@ -1071,16 +1039,15 @@ function renderCalendar(){
     </div>
     <div class="card">
       <div class="cal-head">
-        <button class="btn ghost small" data-action="cal-prev" ${atStart ? 'disabled' : ''}>← Prev</button>
-        <span class="date-label">${MONTH_NAMES[m]} ${y}</span>
-        <button class="btn ghost small" data-action="cal-next" ${atEnd ? 'disabled' : ''}>Next →</button>
-        <span class="spacer" style="flex:1"></span>
-        <select class="select-input" id="calJump" style="width:auto">${jumpOptions.join('')}</select>
+        <button class="btn ghost small" data-action="cal-prev" ${calPage <= 0 ? 'disabled' : ''}>← Prev</button>
+        <span class="date-label">${fmtShort(RANGE_MIN)} — ${fmtShort(RANGE_MAX)}</span>
+        <button class="btn ghost small" data-action="cal-next" ${calPage >= pages.length - 1 ? 'disabled' : ''}>Next →</button>
       </div>
       <div class="cal-grid">
         ${DOW_ORDER.map(d => `<div class="cal-dow">${d}</div>`).join('')}
         ${cells}
       </div>
+      <p class="hint" style="margin-top:10px">Demo week — the full planner covers all of 2026–2027.</p>
     </div>`;
 }
 
@@ -1093,6 +1060,7 @@ function renderWeekly(){
   const rows = [];
   for (let i = 0; i < 7; i++) {
     const iso = isoOf(addDays(parseISO(startISO), i));
+    if (!inWindow(iso)) continue;
     const dd = parseISO(iso);
     rows.push(`
       <div class="week-day-row">
@@ -1107,9 +1075,7 @@ function renderWeekly(){
       <p class="sub">The week at a glance — one line per day is enough.</p>
     </div>
     <div class="date-nav">
-      <button class="btn ghost small" data-action="week-prev">← Prev week</button>
-      <span class="date-label">${fmtShort(startISO)} — ${fmtShort(endISO)}</span>
-      <button class="btn ghost small" data-action="week-next">Next week →</button>
+      <span class="date-label">${fmtShort(RANGE_MIN)} — ${fmtShort(RANGE_MAX)}</span>
       <span class="spacer"></span>
       <button class="btn ghost small" data-action="week-this">This week</button>
     </div>
@@ -1172,23 +1138,27 @@ function renderInbox(){
 /* ---------------- View: Habits ---------------- */
 function renderHabits(){
   const el = document.getElementById('view-habits');
-  const { y, m } = habitCursor;
-  const daysInMonth = new Date(y, m + 1, 0).getDate();
-  const atStart = (y === 2026 && m === 0);
-  const atEnd = (y === 2027 && m === 11);
+  const pages = winPages();
+  if (habitPage < 0) habitPage = 0;
+  if (habitPage > pages.length - 1) habitPage = pages.length - 1;
+  const startISO = pages[habitPage];
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const iso = isoOf(addDays(parseISO(startISO), i));
+    if (inWindow(iso)) days.push(iso);
+  }
   let head = '<tr><th class="habit-name-col">Habit</th>';
-  for (let dnum = 1; dnum <= daysInMonth; dnum++) head += `<th>${dnum}</th>`;
+  days.forEach(iso => { const dd = parseISO(iso); head += `<th>${dd.getDate()}</th>`; });
   head += '</tr>';
-  let monthTotal = 0;
+  let total = 0;
   const bodyRows = state.habits.map(h => {
     let cells = '';
-    for (let dnum = 1; dnum <= daysInMonth; dnum++) {
-      const iso = isoOf(new Date(y, m, dnum));
+    days.forEach(iso => {
       const on = !!(state.habitChecks[iso] && state.habitChecks[iso][h.id]);
-      if (on) monthTotal++;
+      if (on) total++;
       const todayCol = (iso === realToday) ? ' today-col' : '';
       cells += `<td><button class="habit-cell${on ? ' on' : ''}${todayCol}" data-action="habit-toggle" data-date="${iso}" data-hid="${h.id}" aria-label="${esc(h.name)} on ${iso}">${on ? ic('check') : ''}</button></td>`;
-    }
+    });
     return `<tr>
       <td class="habit-name-cell"><div class="habit-name-wrap">
         <input type="text" class="habit-name-input" value="${esc(h.name)}" data-bind="habit-name" data-hid="${h.id}" autocomplete="off" aria-label="Habit name">
@@ -1202,16 +1172,16 @@ function renderHabits(){
     </div>
     <div class="card">
       <div class="cal-head">
-        <button class="btn ghost small" data-action="habit-prev" ${atStart ? 'disabled' : ''}>← Prev</button>
-        <span class="date-label">${MONTH_NAMES[m]} ${y}</span>
-        <button class="btn ghost small" data-action="habit-next" ${atEnd ? 'disabled' : ''}>Next →</button>
+        <button class="btn ghost small" data-action="habit-prev" ${habitPage <= 0 ? 'disabled' : ''}>← Prev</button>
+        <span class="date-label">${fmtShort(RANGE_MIN)} — ${fmtShort(RANGE_MAX)}</span>
+        <button class="btn ghost small" data-action="habit-next" ${habitPage >= pages.length - 1 ? 'disabled' : ''}>Next →</button>
         <span class="spacer" style="flex:1"></span>
         <button class="btn small" data-action="habit-add" ${state.habits.length >= 8 ? 'disabled' : ''}>${ic('plus')} Add habit</button>
       </div>
       <div class="habit-scroll">
         <table class="habit-table"><thead>${head}</thead><tbody>${bodyRows}</tbody></table>
       </div>
-      <p class="habit-count"><strong>${monthTotal}</strong> check-ins logged in ${MONTH_NAMES[m]} — every single one counts.${state.habits.length >= 8 ? ' (Maximum of 8 habits — small lists get done.)' : ''}</p>
+      <p class="habit-count"><strong>${total}</strong> check-ins logged in the demo week — every single one counts.${state.habits.length >= 8 ? ' (Maximum of 8 habits — small lists get done.)' : ''}</p>
       <p class="hint" style="margin-top:6px">Tip: tap a habit’s name to rename it. Fewer, kinder habits beat a long list you avoid.</p>
     </div>`;
 }
@@ -1383,19 +1353,13 @@ document.addEventListener('keydown', function(e){
   }
 });
 
-/* ---------------- Change events (date pickers, selects, import) ---------------- */
+/* ---------------- Change events (date pickers, selects) ---------------- */
 document.addEventListener('change', function(e){
   const el = e.target;
   if (el.id === 'plannerDateInput') {
     if (el.value) { plannerDate = clampISO(el.value); renderPlanner(); }
-  } else if (el.id === 'calJump') {
-    const parts = el.value.split('-').map(Number);
-    calCursor = { y: parts[0], m: parts[1] };
-    renderCalendar();
   } else if (el.id === 'prefHome') {
     if (PREF_VIEWS.includes(el.value)) { prefs.home = el.value; savePrefs(); }
-  } else if (el.id === 'importFile') {
-    importData(el);
   } else if (el.dataset && el.dataset.movedate) {
     inboxMoveDates[el.dataset.movedate] = el.value;
   }
@@ -1506,27 +1470,19 @@ document.addEventListener('click', function(e){
 
     /* Calendar */
     case 'cal-prev':
-      if (calCursor.m === 0) { calCursor = { y: calCursor.y - 1, m: 11 }; } else { calCursor.m--; }
+      if (calPage > 0) calPage--;
       renderCalendar();
       break;
     case 'cal-next':
-      if (calCursor.m === 11) { calCursor = { y: calCursor.y + 1, m: 0 }; } else { calCursor.m++; }
+      if (calPage < winPages().length - 1) calPage++;
       renderCalendar();
       break;
     case 'cal-day':
-      plannerDate = el.dataset.date;
+      plannerDate = clampISO(el.dataset.date);
       showView('planner');
       break;
 
     /* Weekly navigation */
-    case 'week-prev':
-      weekAnchor = isoOf(addDays(parseISO(weekAnchor), -7));
-      renderWeekly();
-      break;
-    case 'week-next':
-      weekAnchor = isoOf(addDays(parseISO(weekAnchor), 7));
-      renderWeekly();
-      break;
     case 'week-this':
       weekAnchor = clampISO(realToday);
       renderWeekly();
@@ -1551,6 +1507,7 @@ document.addEventListener('click', function(e){
 
     /* Habits */
     case 'habit-toggle': {
+      if (!inWindow(date)) break;
       if (!state.habitChecks[date]) state.habitChecks[date] = {};
       const checks = state.habitChecks[date];
       if (checks[el.dataset.hid]) delete checks[el.dataset.hid];
@@ -1575,11 +1532,11 @@ document.addEventListener('click', function(e){
       break;
     }
     case 'habit-prev':
-      if (habitCursor.m === 0) { habitCursor = { y: habitCursor.y - 1, m: 11 }; } else { habitCursor.m--; }
+      if (habitPage > 0) habitPage--;
       renderHabits();
       break;
     case 'habit-next':
-      if (habitCursor.m === 11) { habitCursor = { y: habitCursor.y + 1, m: 0 }; } else { habitCursor.m++; }
+      if (habitPage < winPages().length - 1) habitPage++;
       renderHabits();
       break;
 
@@ -1640,17 +1597,14 @@ document.addEventListener('click', function(e){
       break;
 
     /* Settings */
-    case 'export':
-      exportData();
-      break;
     case 'clear-all':
       if (window.confirm('Clear ALL planner data from this browser? Days, habits, routines and notes will be permanently removed.')) {
         try { localStorage.removeItem(STORE_KEY); } catch (err) {}
         state = seedState();
         plannerDate = clampISO(realToday);
         weekAnchor = clampISO(realToday);
-        calCursor = { y: parseISO(plannerDate).getFullYear(), m: parseISO(plannerDate).getMonth() };
-        habitCursor = { y: calCursor.y, m: calCursor.m };
+        calPage = 0;
+        habitPage = 0;
         Object.keys(inboxMoveDates).forEach(k => delete inboxMoveDates[k]);
         save();
         showView('today');
@@ -1658,48 +1612,6 @@ document.addEventListener('click', function(e){
       break;
   }
 });
-
-/* ---------------- Export / import ---------------- */
-function exportData(){
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'FedorianStudio-ADHD-Planner-backup-' + todayISO() + '.json';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-}
-function importData(inputEl){
-  const file = inputEl.files && inputEl.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(){
-    try {
-      const parsed = JSON.parse(reader.result);
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('bad shape');
-      const fresh = seedState();
-      state = Object.assign(fresh, parsed);
-      if (!Array.isArray(state.habits) || !state.habits.length) state.habits = fresh.habits;
-      if (!state.routines || !Array.isArray(state.routines.morning)) state.routines = fresh.routines;
-      if (!state.days || typeof state.days !== 'object') state.days = {};
-      if (!Array.isArray(state.inbox)) state.inbox = [];
-      if (!Array.isArray(state.notes)) state.notes = [];
-      if (!state.habitChecks || typeof state.habitChecks !== 'object') state.habitChecks = {};
-      if (!state.routineChecks || typeof state.routineChecks !== 'object') state.routineChecks = {};
-      if (!state.weeks || typeof state.weeks !== 'object') state.weeks = {};
-      Object.keys(inboxMoveDates).forEach(k => delete inboxMoveDates[k]);
-      save();
-      rerender();
-      window.alert('Your planner data has been imported. Welcome back.');
-    } catch (err) {
-      window.alert('That file could not be imported. Please choose a backup file exported from this planner.');
-    }
-    inputEl.value = '';
-  };
-  reader.readAsText(file);
-}
 
 /* ---------------- Preferences (separate localStorage key; the data key/model are untouched) ---------------- */
 const PREFS_KEY = 'fedorian_adhd_planner_prefs_v1';
@@ -1820,105 +1732,6 @@ window.addEventListener('appinstalled', refreshInstallCard);
 applyPrefs();
 refreshInstallCard();
 showView(prefs.home);
-</script>
-<script>
-/* ============================================================
-   Demo limits (demo file only — not part of the product):
-   upgrade toast + rolling 7-day navigation guard. The guard
-   runs in the capture phase, so gated clicks/changes never
-   reach the app's own handlers; no app function is modified.
-   The window is anchored on the viewer's real today:
-   [today −1 … today +5] inclusive. Dates inside the window
-   behave exactly like the product. Any doubt (missing app
-   globals, unexpected shapes) fails OPEN: the demo must never
-   be more broken than the product.
-   ============================================================ */
-(function(){
-  var ETSY_URL = 'https://www.etsy.com/shop/FedorianStudio';
-  var MESSAGES = {
-    nav: 'The demo covers this week only — the full planner unlocks all of 2026–2027.',
-    save: 'Demo limit: only this week is saved — the full planner saves all of 2026–2027.'
-  };
-  function pad(n){ return String(n).padStart(2, '0'); }
-  function isoOf(d){ return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
-  function parseISO(s){ var p = String(s).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
-  function shiftISO(s, n){ var d = parseISO(s); d.setDate(d.getDate() + n); return isoOf(d); }
-  function winStart(){ return shiftISO(isoOf(new Date()), -1); }
-  function winEnd(){ return shiftISO(isoOf(new Date()), 5); }
-  function inWindow(iso){
-    return typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(iso) && iso >= winStart() && iso <= winEnd();
-  }
-  function weekIntersects(startIso){ return shiftISO(startIso, 6) >= winStart() && startIso <= winEnd(); }
-
-  /* --- Upgrade toast (one element, reused for every limit) --- */
-  var toastEl = null, toastTimer = null;
-  function ensureToast(){
-    if (toastEl) return toastEl;
-    toastEl = document.createElement('div');
-    toastEl.id = 'demoToast';
-    toastEl.setAttribute('role', 'status');
-    document.body.appendChild(toastEl);
-    return toastEl;
-  }
-  window.__fedorianDemoToast = function(kind){
-    try {
-      var el = ensureToast();
-      el.innerHTML = '';
-      el.appendChild(document.createTextNode((MESSAGES[kind] || MESSAGES.nav) + ' '));
-      var a = document.createElement('a');
-      a.href = ETSY_URL;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      a.textContent = 'Get it on Etsy →';
-      el.appendChild(a);
-      el.classList.add('show');
-      if (toastTimer) clearTimeout(toastTimer);
-      toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 4000);
-    } catch (e) { /* a toast failure must never break the demo */ }
-  };
-
-  /* --- Navigation guard --- */
-  document.addEventListener('click', function(e){
-    var t = e.target;
-    var el = (t && t.closest) ? t.closest('[data-action]') : null;
-    if (!el) return;
-    var action = el.dataset.action, block = false;
-    try {
-      if (action === 'cal-day') {
-        block = !inWindow(el.dataset.date);
-      } else if (action === 'planner-prev') {
-        block = !inWindow(shiftISO(plannerDate, -1));
-      } else if (action === 'planner-next') {
-        block = !inWindow(shiftISO(plannerDate, 1));
-      } else if (action === 'week-prev') {
-        block = !weekIntersects(weekStartOf(shiftISO(weekAnchor, -7)));
-      } else if (action === 'week-next') {
-        block = !weekIntersects(weekStartOf(shiftISO(weekAnchor, 7)));
-      } else if (action === 'inbox-move') {
-        block = !inWindow(clampISO(inboxMoveDates[el.dataset.id] || plannerDate));
-      }
-    } catch (err) { block = false; }
-    if (block) {
-      e.preventDefault();
-      e.stopPropagation();
-      window.__fedorianDemoToast('nav');
-    }
-  }, true);
-
-  document.addEventListener('change', function(e){
-    var el = e.target;
-    if (el && el.id === 'plannerDateInput' && el.value) {
-      var ok = true;
-      try { ok = inWindow(clampISO(el.value)); } catch (err) { ok = true; }
-      if (!ok) {
-        e.preventDefault();
-        e.stopPropagation();
-        try { el.value = plannerDate; } catch (err) {}
-        window.__fedorianDemoToast('nav');
-      }
-    }
-  }, true);
-})();
 </script>
 <script>
 /* PWA install support (demo host only): registering the pass-through service worker is what makes the demo installable in Chrome. Guarded so it can never throw on file:// or in browsers without service workers. */
